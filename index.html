@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0A0710" id="metaTheme">
+<meta name="theme-color" content="#070B12" id="metaTheme">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="VOLTAGE">
-<title>VOLTAGE – Show up.</title>
+<title>VOLTAGE</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -23,7 +23,7 @@
     <div class="brand-row">
       <div class="brand">
         <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M37 2 18 37h12l-5 25 21-36H34L42 2z" fill="currentColor"/></svg>
-        <div><h1>VOLTAGE</h1><p class="tag">Show up.</p></div>
+        <div><h1>VOLTAGE</h1></div>
       </div>
       <button class="ev" id="eventCard" aria-label="Naar doelen en planning">
         <div class="ev-label">NEXT EVENT</div>
@@ -47,7 +47,7 @@
 </div>
 
 <main class="wrap" id="hub">
-  <p class="hub-q">Waar gaan we vandaag naartoe?</p>
+  <p class="hub-q">Maak je keuze</p>
   <div class="hub-tiles">
     <button type="button" class="hub-tile t-sport" data-go="sport">
       <span class="ht-k">Sport</span><span class="ht-big" id="hubSportBig">–</span><span class="ht-s" id="hubSport">Training, progress en recepten</span>
@@ -57,6 +57,12 @@
     </button>
     <button type="button" class="hub-tile t-date" data-go="date">
       <span class="ht-k">Daten &amp; Eten</span><span class="ht-big" id="hubDateBig">–</span><span class="ht-s" id="hubDate">Ideeën, plannen en herinneringen</span>
+    </button>
+    <button type="button" class="hub-tile t-wish" data-go="wish">
+      <span class="ht-k">Wishlist</span><span class="ht-big" id="hubWishBig">–</span><span class="ht-s" id="hubWish">Cadeautjes voor elkaar</span>
+    </button>
+    <button type="button" class="hub-tile t-rem" data-go="rem">
+      <span class="ht-k">Reminders</span><span class="ht-big" id="hubRemBig">–</span><span class="ht-s" id="hubRem">Niet vergeten</span>
     </button>
   </div>
 </main>
@@ -186,6 +192,7 @@
       <button role="tab" data-stab="prod" aria-selected="false">Producten</button>
       <button role="tab" data-stab="month" aria-selected="false">Maandoverzicht</button>
     </div>
+    <p class="shared-note"><span aria-hidden="true">●</span> Eén gezamenlijke lijst van Lorenzo &amp; Nele</p>
     <p class="status status-mirror" id="shopStatus"></p>
   </section>
 
@@ -235,7 +242,35 @@
   <div id="dateBody"></div>
 </main>
 
-<p class="appver wrap">VOLTAGE · versie 20 · <button type="button" id="btnRefresh">App vernieuwen</button> · <button type="button" id="btnPushTest">Test meldingen</button></p>
+<main class="wrap" id="tabWish" hidden>
+  <section class="card">
+    <div class="phasetabs subtabs" role="tablist" aria-label="Wishlist">
+      <button role="tab" data-wtab="mine" aria-selected="true">Mijn lijst</button>
+      <button role="tab" data-wtab="other" aria-selected="false" id="wtOther">Van de ander</button>
+      <button role="tab" data-wtab="got" aria-selected="false">Gekregen</button>
+    </div>
+    <p class="status status-mirror" id="wishStatus"></p>
+  </section>
+  <div id="wishBody"></div>
+</main>
+
+<main class="wrap" id="tabRem" hidden>
+  <section class="card section">
+    <form id="remQuick" class="remquick" autocomplete="off">
+      <label class="sr" for="rqText">Nieuwe reminder</label>
+      <input id="rqText" maxlength="200" placeholder="Niet vergeten: bv. pakje ophalen">
+      <div class="rq-row">
+        <div class="seg rq-for" role="group" aria-label="Voor wie"><button type="button" data-rqf="both" aria-pressed="true">Samen</button><button type="button" data-rqf="lor" aria-pressed="false">Lorenzo</button><button type="button" data-rqf="nel" aria-pressed="false">Nele</button></div>
+        <label class="rq-due"><span>Tegen</span><input id="rqDue" type="date"></label>
+        <button class="primary" type="submit">Toevoegen</button>
+      </div>
+    </form>
+    <p class="status status-mirror" id="remStatus"></p>
+  </section>
+  <div id="remBody"></div>
+</main>
+
+<p class="appver wrap">VOLTAGE · versie 21 · <button type="button" id="btnRefresh">App vernieuwen</button> · <button type="button" id="btnPushTest">Test meldingen</button></p>
 
 <!-- Training loggen / bewerken -->
 <div class="sheet-bg" id="wSheet" role="dialog" aria-modal="true" aria-labelledby="wTitle">
@@ -435,6 +470,31 @@
     <div class="actions"><button class="btn-sec" type="button" id="rnAgain">Iets anders</button><button class="btn-save" type="button" id="rnPlan">Plannen</button></div>
     <button class="linkish" type="button" data-close="rnSheet">Sluiten</button>
   </div>
+</div>
+
+<!-- Wishlist: wens toevoegen / bewerken -->
+<div class="sheet-bg" id="wsSheet" role="dialog" aria-modal="true" aria-labelledby="wsTitle">
+  <form class="sheet big" id="wsForm">
+    <div class="head"><div><h3 id="wsTitle">Nieuwe wens</h3><p class="sub">De ander ziet dit op jouw wishlist.</p></div><button class="x" type="button" data-close="wsSheet" aria-label="Sluiten">×</button></div>
+    <label>Wat wens je?<input id="wsName" maxlength="80" required placeholder="bv. Hoofdtelefoon, boek, parfum"></label>
+    <label>Link naar de winkel<input id="wsLink" maxlength="400" inputmode="url" placeholder="https://…"></label>
+    <div class="grid2"><label>Richtprijs (€)<input id="wsPrice" inputmode="decimal" maxlength="10" placeholder="bv. 49,99"></label><label>Gelegenheid<select id="wsOcc"><option value="">Om het even</option><option value="verjaardag">Verjaardag</option><option value="kerst">Kerst</option><option value="valentijn">Valentijn</option><option value="jubileum">Jubileum</option><option value="zomaar">Zomaar</option></select></label></div>
+    <div class="block"><h4>Hoe graag?</h4><div class="seg" role="group" aria-label="Hoe graag" id="wsPrio"><button type="button" data-prio="1" aria-pressed="true">Leuk</button><button type="button" data-prio="2" aria-pressed="false">Graag</button><button type="button" data-prio="3" aria-pressed="false">Heel graag</button></div></div>
+    <label>Notitie<textarea id="wsNote" rows="3" maxlength="1000" placeholder="Maat, kleur, model, waar te koop…"></textarea></label>
+    <div class="block"><h4>Foto</h4><div class="photos" id="wsPhoto"></div></div>
+    <div class="actions"><button class="btn-del" type="button" id="wsDel">Wissen</button><button class="btn-sec" type="button" data-close="wsSheet">Annuleren</button><button class="btn-save" type="submit">Opslaan</button></div>
+  </form>
+</div>
+
+<!-- Reminder bewerken -->
+<div class="sheet-bg" id="rmSheet" role="dialog" aria-modal="true" aria-labelledby="rmTitle">
+  <form class="sheet" id="rmForm">
+    <div class="head"><div><h3 id="rmTitle">Reminder</h3><p class="sub" id="rmSub"></p></div><button class="x" type="button" data-close="rmSheet" aria-label="Sluiten">×</button></div>
+    <label>Wat<input id="rmText" maxlength="200" required></label>
+    <div class="block"><h4>Voor wie</h4><div class="seg" role="group" aria-label="Voor wie" id="rmFor"><button type="button" data-rmf="both" aria-pressed="true">Samen</button><button type="button" data-rmf="lor" aria-pressed="false">Lorenzo</button><button type="button" data-rmf="nel" aria-pressed="false">Nele</button></div></div>
+    <label>Tegen wanneer (optioneel)<input id="rmDue" type="date"></label>
+    <div class="actions"><button class="btn-del" type="button" id="rmDel">Wissen</button><button class="btn-sec" type="button" data-close="rmSheet">Annuleren</button><button class="btn-save" type="submit">Opslaan</button></div>
+  </form>
 </div>
 
 <!-- Recept bekijken -->

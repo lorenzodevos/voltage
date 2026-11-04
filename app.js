@@ -1193,16 +1193,18 @@ $("saForm").addEventListener("submit",async e=>{e.preventDefault();const it={nam
 setInterval(()=>{if(document.visibilityState==="visible"&&sec==="shop"&&stab==="list"&&!document.querySelector(".sheet-bg.open")&&!Object.keys(pend).length)refreshShop()},12000);
 
 // ================= SECTIES (startpagina, sport, shop, daten) =================
-const SECS={hub:{name:"",theme:"#0A0710"},sport:{name:"Sport",theme:"#0B0B0C"},shop:{name:"Shop",theme:"#0B2A5B"},date:{name:"Daten & Eten",theme:"#1A0508"}};
+const SECS={hub:{name:"",theme:"#070B12"},sport:{name:"Sport",theme:"#0B0B0C"},shop:{name:"Shop",theme:"#0B2A5B"},date:{name:"Daten & Eten",theme:"#1A0508"},wish:{name:"Wishlist",theme:"#7FE3BE"},rem:{name:"Reminders",theme:"#FFC93C"}};
 let sec="hub";try{const v=localStorage.getItem("voltage-sec");if(SECS[v])sec=v}catch(_){}
 function showSec(s,fromPop){if(!SECS[s])s="hub";const prev=sec;sec=s;try{localStorage.setItem("voltage-sec",s)}catch(_){}
   document.body.dataset.sec=s;$("metaTheme").setAttribute("content",SECS[s].theme);
   $("hub").hidden=s!=="hub";$("secbar").hidden=s==="hub";$("secName").textContent=SECS[s].name;
   document.querySelector(".tabs").hidden=s!=="sport";$("eventCard").hidden=s!=="sport";
-  $("tabShop").hidden=s!=="shop";$("tabDate").hidden=s!=="date";
+  $("tabShop").hidden=s!=="shop";$("tabDate").hidden=s!=="date";$("tabWish").hidden=s!=="wish";$("tabRem").hidden=s!=="rem";
   showTab(tab);
   if(s==="shop"){renderShop(true);refreshShop()}
   if(s==="date")renderDates();
+  if(s==="wish")renderWish();
+  if(s==="rem")renderRem();
   if(s==="hub")renderHub();
   if(!fromPop&&prev!==s){try{if(s==="hub")history.replaceState({sec:"hub"},"");else history.pushState({sec:s},"")}catch(_){}}
   window.scrollTo(0,0)}
@@ -1220,7 +1222,15 @@ function renderHub(){if($("hub").hidden)return;
   const up=DT.filter(d=>d.type==="moment"&&d.status==="planned"&&d.date>=TODAY).sort((a,b)=>a.date.localeCompare(b.date))[0];
   const ideas=DT.filter(d=>d.type==="idea").length;
   if(up){const n=Math.round((pd(up.date)-T0)/864e5);$("hubDateBig").textContent=n===0?"Vandaag":n===1?"Morgen":"Over "+n+" dagen";$("hubDate").textContent=up.title}
-  else{$("hubDateBig").textContent=ideas?ideas+" idee"+(ideas>1?"ën":""):"Plan iets";$("hubDate").textContent=ideas?"Klaar om te kiezen":"Ideeën, plannen en herinneringen"}}
+  else{$("hubDateBig").textContent=ideas?ideas+" idee"+(ideas>1?"ën":""):"Plan iets";$("hubDate").textContent=ideas?"Klaar om te kiezen":"Ideeën, plannen en herinneringen"}
+  const wOpen=WS.filter(w=>w.status!=="received");
+  if(who){const theirs=wOpen.filter(w=>w.owner===other()),mine=wOpen.filter(w=>w.owner===who);
+    $("hubWishBig").textContent=theirs.length?theirs.length+(theirs.length>1?" wensen":" wens"):"Leeg";
+    $("hubWish").textContent=`van ${NAMES[other()]} · jij hebt er ${mine.length}`}
+  else{$("hubWishBig").textContent=wOpen.length?wOpen.length+(wOpen.length>1?" wensen":" wens"):"Leeg";$("hubWish").textContent="Cadeautjes voor elkaar"}
+  const ro=RM.filter(r=>!r.done&&(!who||r.forWho==="both"||r.forWho===who)).sort(remSort);
+  $("hubRemBig").textContent=ro.length?ro.length+" open":"Alles gedaan";
+  $("hubRem").textContent=ro.length?ro[0].text:"Niet vergeten"}
 
 // ================= DATEN & ETEN =================
 const DCAT={datenight:"Date night",uitstap:"Uitstap",restaurant:"Uit eten",thuis:"Thuis",reis:"Weekend & reizen",overig:"Overig"};
@@ -1325,6 +1335,132 @@ function viewMoment(id){const m=dById(id);if(!m)return;dvId=id;const d=pd(m.date
   const g=$("dvPhotos");g.innerHTML="";m.photos.forEach(f=>g.appendChild(photoTile(null,f)));openSheet("dvSheet")}
 $("dvEdit").addEventListener("click",()=>{closeSheet("dvSheet");openMoment({id:dvId})});
 
+// ================= WISHLIST =================
+const OCC={verjaardag:"Verjaardag",kerst:"Kerst",valentijn:"Valentijn",jubileum:"Jubileum",zomaar:"Zomaar"};
+const PRIO={1:"Leuk",2:"Graag",3:"Heel graag"};
+let WS=[],wtab="mine",wocc="all",ws=null;
+try{wtab=localStorage.getItem("voltage-wtab")||"mine"}catch(_){}
+const wById=id=>WS.find(w=>w.id===id);
+const euro2=v=>"€ "+Number(v).toFixed(2).replace(".",",").replace(",00","");
+function wishLink(u){return /^https?:\/\//i.test(u)?u:"https://"+u}
+function wishCard(w,view){const pr=w.price!=null?`<span class="wc-price">${euro2(w.price)}</span>`:"";
+  const meta=[w.occasion?OCC[w.occasion]:"",view==="got"?"van de lijst van "+NAMES[w.owner]:""].filter(Boolean).join(" · ");
+  let st="",btns="";
+  if(view==="mine"){btns=`<button class="textbtn" data-wedit="${esc(w.id)}">Bewerken</button><button class="primary" data-wgot="${esc(w.id)}">Ontvangen</button>`}
+  else if(view==="other"){
+    if(w.status==="bought"){st=`<span class="wc-st bought">${w.reservedBy===who?"Jij hebt dit gekocht":"Al gekocht"}</span>`;
+      if(w.reservedBy===who)btns=`<button class="textbtn" data-wundo="${esc(w.id)}">Toch niet gekocht</button>`}
+    else if(w.reservedBy){st=`<span class="wc-st res">${w.reservedBy===who?"Jij koopt dit":"Gereserveerd"}</span>`;
+      if(w.reservedBy===who)btns=`<button class="textbtn" data-wunres="${esc(w.id)}">Vrijgeven</button><button class="primary" data-wbuy="${esc(w.id)}">Gekocht</button>`}
+    else btns=`<button class="primary" data-wres="${esc(w.id)}">Ik koop dit</button>`}
+  else if(w.owner===who)btns=`<button class="textbtn" data-wback="${esc(w.id)}">Terug op lijst</button>`;
+  return `<article class="wcard p${w.prio}${view==="other"&&(w.reservedBy||w.status==="bought")?" taken":""}">
+    ${w.photo?`<div class="rimg load wc-img" data-photo="${esc(w.photo)}"></div>`:""}
+    <div class="wc-body"><div class="wc-top"><span class="wc-prio" title="${PRIO[w.prio]}">${"★".repeat(w.prio)}<span class="off">${"★".repeat(3-w.prio)}</span> ${PRIO[w.prio]}</span>${pr}</div>
+      <b class="wc-title">${esc(w.title)}</b>${meta?`<span class="wc-meta">${meta}</span>`:""}${w.note?`<span class="wc-note">${esc(w.note)}</span>`:""}
+      ${w.link?`<a class="wc-link" href="${esc(wishLink(w.link))}" target="_blank" rel="noopener">Bekijk in de winkel ›</a>`:""}${st}
+      ${btns?`<div class="wc-btns">${btns}</div>`:""}</div></article>`}
+function renderWish(){if(!$("tabWish")||$("tabWish").hidden)return;
+  $("wtOther").textContent=who?"Van "+NAMES[other()]:"Van de ander";
+  document.querySelectorAll("[data-wtab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.wtab===wtab)));
+  if(!who){$("wishBody").innerHTML=`<section class="card"><p class="dayempty">Tik bovenaan op je naam, zodat de app weet welke wishlist van jou is.</p></section>`;return}
+  const open=WS.filter(w=>w.status!=="received"),srt=(a,b)=>b.prio-a.prio||b.createdAt-a.createdAt;let h="",list=[];
+  if(wtab==="mine"){list=open.filter(w=>w.owner===who);
+    h=`<div class="date-actions"><button class="primary" data-wa="new">+ Wens toevoegen</button></div>`}
+  else if(wtab==="other"){list=open.filter(w=>w.owner===other());
+    h=`<p class="wish-hint">Tik op <b>Ik koop dit</b> om een wens te reserveren. ${NAMES[other()]} ziet in de app niet wat jij reserveert of koopt.</p>`}
+  else list=WS.filter(w=>w.status==="received").sort((a,b)=>b.updatedAt-a.updatedAt);
+  if(wtab!=="got"){const occs=Object.keys(OCC).filter(k=>list.some(w=>w.occasion===k));if(wocc!=="all"&&!occs.includes(wocc))wocc="all";
+    if(occs.length>1)h+=`<div class="phasechips">${[["all","Alles"]].concat(occs.map(k=>[k,OCC[k]])).map(([k,l])=>`<button type="button" data-wocc="${k}" aria-pressed="${wocc===k}">${l}</button>`).join("")}</div>`;
+    list=list.filter(w=>wocc==="all"||w.occasion===wocc||!w.occasion).sort(srt)}
+  h+=list.length?`<div class="wgrid">${list.map(w=>wishCard(w,wtab)).join("")}</div>`
+    :`<section class="card"><p class="dayempty">${wtab==="mine"?"Je wishlist is nog leeg. Zet hier alles wat je graag zou krijgen, met een link en een foto. Zo weet "+NAMES[other()]+" altijd wat je blij maakt.":wtab==="other"?NAMES[other()]+" heeft nog niets op de wishlist gezet.":"Hier komen de cadeautjes die jullie al gekregen hebben."}</p></section>`;
+  $("wishBody").innerHTML=h;hydratePhotos($("wishBody"))}
+document.querySelectorAll("[data-wtab]").forEach(b=>b.addEventListener("click",()=>{wtab=b.dataset.wtab;try{localStorage.setItem("voltage-wtab",wtab)}catch(_){}renderWish()}));
+async function wishRun(fn,args,msg){return dateRun(fn,args,msg)}
+$("wishBody").addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(d.wocc){wocc=d.wocc;renderWish();return}
+  if(d.wa==="new")return openWish(null);
+  if(d.wedit)return openWish(d.wedit);
+  if(d.wres){const w=wById(d.wres);if(await wishRun("setWishState",[w.id,who,{reservedBy:true}],"Gereserveerd. Jij koopt “"+w.title+"”."))return;return}
+  if(d.wunres)return wishRun("setWishState",[d.wunres,who,{reservedBy:false}],"Reservatie vrijgegeven.");
+  if(d.wbuy)return wishRun("setWishState",[d.wbuy,who,{status:"bought"}],"Top, gemarkeerd als gekocht.");
+  if(d.wundo)return wishRun("setWishState",[d.wundo,who,{status:"open"}],"Weer op ‘Jij koopt dit’ gezet.");
+  if(d.wgot){const w=wById(d.wgot);if(!(await ask(`“${w.title}” gekregen? Dan verhuist de wens naar Ontvangen.`,{title:"Ontvangen?",ok:"Ja, gekregen"})))return;
+    const r=await wishRun("setWishState",[w.id,who,{status:"received"}],"Naar Ontvangen verplaatst.");if(r)push(other(),`${NAMES[who]} heeft een wens ontvangen`,w.title);return}
+  if(d.wback)return wishRun("setWishState",[d.wback,who,{status:"open"}],"Terug op je wishlist.")});
+function openWish(id){const w=id?wById(id):null;ws={id:w?w.id:null,prio:w?w.prio:1,staged:null,removePhoto:false};
+  $("wsTitle").textContent=w?"Wens bewerken":"Nieuwe wens";$("wsName").value=w?w.title:"";$("wsLink").value=w?w.link:"";
+  $("wsPrice").value=w&&w.price!=null?String(w.price).replace(".",","):"";$("wsOcc").value=w?w.occasion:(wocc!=="all"?wocc:"");$("wsNote").value=w?w.note:"";
+  $("wsDel").style.visibility=w?"visible":"hidden";syncWs();openSheet("wsSheet");setTimeout(()=>$("wsName").focus(),60)}
+function syncWs(){document.querySelectorAll("#wsPrio button").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.prio===ws.prio)));
+  const w=ws.id?wById(ws.id):null,box=$("wsPhoto");box.innerHTML="";
+  if(ws.staged)box.appendChild(photoTile(ws.staged,null,()=>{ws.staged=null;syncWs()}));
+  else if(w&&w.photo&&!ws.removePhoto)box.appendChild(photoTile(null,w.photo,()=>{ws.removePhoto=true;syncWs()}));
+  else{const b=document.createElement("button");b.type="button";b.className="addph";b.innerHTML="<span>+ Foto</span>";
+    b.addEventListener("click",async()=>{const fs=await pickPhotos(false);if(!fs[0])return;try{ws.staged=await resize(fs[0]);ws.removePhoto=false}catch(_){setStatus("Die foto kon niet gelezen worden.",true)}syncWs()});box.appendChild(b)}}
+document.querySelectorAll("#wsPrio button").forEach(b=>b.addEventListener("click",()=>{ws.prio=+b.dataset.prio;syncWs()}));
+$("wsForm").addEventListener("submit",async e=>{e.preventDefault();if(!who)return;const old=ws.id?wById(ws.id):null;
+  const pv=$("wsPrice").value.replace(/[^0-9,.]/g,"").replace(",",".");if(pv!==""&&isNaN(+pv)){$("wsPrice").focus();return}
+  const it={id:ws.id,owner:who,title:$("wsName").value.trim(),link:$("wsLink").value.trim(),price:pv===""?null:+pv,prio:ws.prio,occasion:$("wsOcc").value,note:$("wsNote").value.trim()};
+  if(!it.title)return;const st={staged:ws.staged,rm:ws.removePhoto&&old&&old.photo};closeSheet("wsSheet");busy++;setStatus("Opslaan…");
+  try{let r=await call("saveWish",it);const id=r.savedId;
+    if(st.staged){setStatus("Foto opladen…");r=await call("uploadWishPhoto",id,who,st.staged)}else if(st.rm)r=await call("removeWishPhoto",id,who);
+    busy--;apply(r);if(!old){wtab="mine";renderWish()}setStatus(old?"Wens opgeslagen.":"Op je wishlist gezet.");
+    if(!old)push(other(),`Nieuw op de wishlist van ${NAMES[who]}`,it.title+(it.price!=null?" · "+euro2(it.price):""))}
+  catch(err){busy--;setStatus(errText(err),true);refresh()}});
+$("wsDel").addEventListener("click",async()=>{const w=wById(ws.id);if(!w||!(await ask(`“${w.title}” van je wishlist halen?`,{title:"Verwijderen?",ok:"Ja, verwijder",danger:true})))return;closeSheet("wsSheet");await wishRun("deleteWish",[w.id,who],"Wens verwijderd.")});
+
+// ================= REMINDERS =================
+let RM=[],rqFor="both",rmEdit=null,rmFor="both",remShowDone=false;
+const rById=id=>RM.find(r=>r.id===id);
+function remSort(a,b){const da=a.due||"9999",db=b.due||"9999";return da.localeCompare(db)||b.createdAt-a.createdAt}
+function forLabel(f){return f==="both"?"Voor ons samen":"Voor "+NAMES[f]}
+function dueLabel(r){if(!r.due)return"";const n=Math.round((pd(r.due)-T0)/864e5);
+  const t=n===0?"vandaag":n===1?"morgen":n<0?(n===-1?"gisteren":`${-n} dagen te laat`):n<7?dayName(pd(r.due)).toLowerCase():fd(pd(r.due));
+  return `<span class="rm-due${n<0?" late":n===0?" today":""}">${n<0&&n!==-1?"":"tegen "}${t}</span>`}
+function remRow(r){return `<li class="rmrow${r.done?" done":""}${r.forWho===who?" me":""}">
+  <button type="button" class="rmchk" data-rtog="${esc(r.id)}" aria-pressed="${r.done}" aria-label="${r.done?"Niet meer afgevinkt":"Afvinken"}: ${esc(r.text)}"></button>
+  <button type="button" class="rmtxt" data-redit="${esc(r.id)}"><b>${esc(r.text)}</b>
+  <span class="rm-meta"><span class="rm-for f-${r.forWho}">${forLabel(r.forWho)}</span>${r.createdBy&&NAMES[r.createdBy]?` · van ${NAMES[r.createdBy]}`:""}${r.done?(r.doneBy?` · gedaan door ${NAMES[r.doneBy]}`:""):dueLabel(r)?" · "+dueLabel(r):""}</span></button></li>`}
+let rflt="all";
+function renderRem(){if(!$("tabRem")||$("tabRem").hidden)return;
+  document.querySelectorAll("[data-rqf]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.rqf===rqFor)));
+  let open=RM.filter(r=>!r.done).sort(remSort);const done=RM.filter(r=>r.done).sort((a,b)=>b.doneAt-a.doneAt);
+  if(who){if(rflt==="me")open=open.filter(r=>r.forWho===who||r.forWho==="both");else if(rflt==="from")open=open.filter(r=>r.createdBy===who)}
+  let h="";
+  if(who)h+=`<div class="phasechips">${[["all","Alles"],["me","Voor mij"],["from","Van mij"]].map(([k,l])=>`<button type="button" data-rflt="${k}" aria-pressed="${rflt===k}">${l}</button>`).join("")}</div>`;
+  h+=open.length?`<ul class="rmlist">${open.map(remRow).join("")}</ul>`
+    :`<section class="card"><p class="dayempty">${RM.some(r=>!r.done)?"Niets in deze selectie.":"Alles is gedaan. Lekker bezig!"}</p></section>`;
+  if(done.length){h+=`<div class="rm-donehead"><button type="button" class="textbtn" data-ra="toggle">${remShowDone?"Verberg":"Toon"} afgevinkt (${done.length})</button>${remShowDone?`<button type="button" class="textbtn" data-ra="clear">Afgevinkte wissen</button>`:""}</div>`;
+    if(remShowDone)h+=`<ul class="rmlist">${done.slice(0,40).map(remRow).join("")}</ul>`}
+  $("remBody").innerHTML=h}
+document.querySelectorAll("[data-rqf]").forEach(b=>b.addEventListener("click",()=>{rqFor=b.dataset.rqf;renderRem()}));
+$("remQuick").addEventListener("submit",async e=>{e.preventDefault();const text=$("rqText").value.trim();if(!text){$("rqText").focus();return}
+  if(!who){ask("Tik eerst bovenaan op je naam, zodat de ander weet van wie de reminder komt.",{alert:true,title:"Wie ben jij?"});return}
+  const it={text,forWho:rqFor,createdBy:who,due:$("rqDue").value};$("rqText").value="";$("rqDue").value="";
+  const r=await dateRun("saveReminder",[it],"Reminder toegevoegd.");
+  if(r&&it.forWho!==who)push(other(),`Reminder van ${NAMES[who]}`,it.text+(it.due?" · tegen "+fd(pd(it.due)):""))});
+$("remBody").addEventListener("click",async e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(d.rflt){rflt=d.rflt;renderRem();return}
+  if(d.ra==="toggle"){remShowDone=!remShowDone;renderRem();return}
+  if(d.ra==="clear"){const done=RM.filter(r=>r.done);if(!(await ask(`${done.length} afgevinkte reminder${done.length>1?"s":""} definitief wissen?`,{title:"Opruimen?",ok:"Ja, wis",danger:true})))return;
+    busy++;setStatus("Opruimen…");try{let r;for(const x of done)r=await call("deleteReminder",x.id);busy--;apply(r);setStatus("Opgeruimd.")}catch(err){busy--;setStatus(errText(err),true);refresh()}return}
+  if(d.rtog){const r=rById(d.rtog);if(!r)return;if(!who){ask("Tik eerst bovenaan op je naam.",{alert:true,title:"Wie ben jij?"});return}
+    const nd=!r.done;r.done=nd;r.doneBy=nd?who:"";r.doneAt=nd?Date.now():0;renderRem();
+    const res=await dateRun("toggleReminder",[r.id,nd,who],nd?"Afgevinkt. Goed gedaan!":"Terug op de lijst gezet.");
+    if(res&&nd&&r.createdBy&&r.createdBy!==who)push(other(),`${NAMES[who]} heeft het gedaan ✓`,r.text);return}
+  if(d.redit)return openRem(d.redit)});
+function openRem(id){const r=rById(id);if(!r)return;rmEdit=id;rmFor=r.forWho;$("rmText").value=r.text;$("rmDue").value=r.due||"";
+  $("rmTitle").textContent=r.done?"Afgevinkte reminder":"Reminder bewerken";
+  $("rmSub").textContent=[r.createdBy&&NAMES[r.createdBy]?"Van "+NAMES[r.createdBy]:"",r.done&&r.doneBy?"gedaan door "+NAMES[r.doneBy]:""].filter(Boolean).join(" · ");
+  syncRm();openSheet("rmSheet")}
+function syncRm(){document.querySelectorAll("#rmFor button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.rmf===rmFor)))}
+document.querySelectorAll("#rmFor button").forEach(b=>b.addEventListener("click",()=>{rmFor=b.dataset.rmf;syncRm()}));
+$("rmForm").addEventListener("submit",async e=>{e.preventDefault();const r=rById(rmEdit);if(!r)return;const text=$("rmText").value.trim();if(!text)return;
+  closeSheet("rmSheet");await dateRun("saveReminder",[{id:r.id,text,forWho:rmFor,due:$("rmDue").value}],"Reminder opgeslagen.")});
+$("rmDel").addEventListener("click",async()=>{const r=rById(rmEdit);if(!r||!(await ask(`“${r.text}” wissen?`,{title:"Verwijderen?",ok:"Ja, wis",danger:true})))return;closeSheet("rmSheet");await dateRun("deleteReminder",[r.id],"Reminder gewist.")});
+
 // ================= EIGEN BEVESTIGINGSVENSTER =================
 function ask(text,o={}){return new Promise(res=>{
   const bg=$("askBg");$("askTitle").textContent=o.title||(o.alert?"Let op":"Ben je zeker?");$("askText").textContent=text;
@@ -1339,24 +1475,25 @@ function ask(text,o={}){return new Promise(res=>{
 function openSheet(id){$(id).classList.add("open")}
 function closeSheet(id){$(id).classList.remove("open");if(id==="vSheet")viewId=null}
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>b.dataset.close==="wSheet"?requestCloseEditor():closeSheet(b.dataset.close)));
-["wSheet","vSheet","gSheet","plSheet","impSheet","xSheet","pfSheet","rvSheet","reSheet","rpSheet","psSheet","saSheet","pdSheet","bgSheet","diSheet","dmSheet","dvSheet","rnSheet"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))id==="wSheet"?requestCloseEditor():closeSheet(id)}));
+["wSheet","vSheet","gSheet","plSheet","impSheet","xSheet","pfSheet","rvSheet","reSheet","rpSheet","psSheet","saSheet","pdSheet","bgSheet","diSheet","dmSheet","dvSheet","rnSheet","wsSheet","rmSheet"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))id==="wSheet"?requestCloseEditor():closeSheet(id)}));
 $("pSheet").addEventListener("click",e=>{if(e.target===$("pSheet"))closePicker()});
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;
   if($("lightbox").classList.contains("open")){$("lightbox").classList.remove("open");return}
   if($("pSheet").classList.contains("open")){closePicker();return}
-  for(const id of ["psSheet","rnSheet","dvSheet","dmSheet","diSheet","bgSheet","pdSheet","saSheet","xSheet","rpSheet","reSheet","rvSheet","pfSheet","impSheet","gSheet","plSheet","wSheet","vSheet"])if($(id).classList.contains("open")){id==="wSheet"?requestCloseEditor():closeSheet(id);return}});
+  for(const id of ["psSheet","wsSheet","rmSheet","rnSheet","dvSheet","dmSheet","diSheet","bgSheet","pdSheet","saSheet","xSheet","rpSheet","reSheet","rvSheet","pfSheet","impSheet","gSheet","plSheet","wSheet","vSheet"])if($(id).classList.contains("open")){id==="wSheet"?requestCloseEditor():closeSheet(id);return}});
 
 // ================= SERVER =================
 let stTimer=null,busy=0;
-function setStatus(msg,warn){if(typeof warn==="undefined")warn=false;const el=$("status");el.textContent=msg;const b=/…$/.test(msg);el.className="status"+(warn?" warn":b?" busy":"");document.querySelectorAll(".status-mirror").forEach(x=>{x.textContent=msg;x.className="status status-mirror"+(warn?" warn":b?" busy":"")});clearTimeout(stTimer);if(!warn&&!b)stTimer=setTimeout(idleStatus,4000)}
-function idleStatus(){if(!pin)return;setStatus(who?"Gedeeld: de ander ziet je trainingen en reacties binnen een halve minuut.":"Tik bovenaan op je naam om te beginnen.")}
-function errText(e){const m=String(e&&e.message||e);if(m.includes("NO_LIST")||m.includes("NO_ITEM"))return"Dit staat niet meer op de lijst. De lijst is vernieuwd.";if(m==="NETWORK")return"Geen verbinding met de server. Controleer je internet.";if(m==="BAD_RESPONSE"||m==="UNKNOWN_FN")return"De server heeft nog de oude versie: publiceer in Apps Script een nieuwe versie.";if(m.indexOf("MAX_PHOTOS")>=0)return"Maximaal 4 foto's per training.";if(m.indexOf("TOO_BIG")>=0)return"Te veel gegevens voor één training.";return"Er ging iets mis ("+m+"). Probeer opnieuw."}
+function setStatus(msg,warn){if(typeof warn==="undefined")warn=false;const el=$("status");el.textContent=msg;const b=/…$/.test(msg);el.className="status"+(warn?" warn":b?" busy":"");const mm=msg===IDLE_MSG?"":msg;document.querySelectorAll(".status-mirror").forEach(x=>{x.textContent=mm;x.className="status status-mirror"+(warn?" warn":b?" busy":"")});clearTimeout(stTimer);if(!warn&&!b)stTimer=setTimeout(idleStatus,4000)}
+const IDLE_MSG="Gedeeld: de ander ziet je trainingen en reacties binnen een halve minuut.";
+function idleStatus(){if(!pin)return;setStatus(who?IDLE_MSG:"Tik bovenaan op je naam om te beginnen.")}
+function errText(e){const m=String(e&&e.message||e);if(m.includes("NO_LIST")||m.includes("NO_ITEM"))return"Dit staat niet meer op de lijst. De lijst is vernieuwd.";if(m==="NETWORK")return"Geen verbinding met de server. Controleer je internet.";if(m==="BAD_RESPONSE"||m==="UNKNOWN_FN")return"De server heeft nog de oude versie: publiceer in Apps Script een nieuwe versie.";if(m.indexOf("TAKEN")>=0)return"Die wens is intussen al gereserveerd.";if(m.indexOf("NOT_OWNER")>=0||m.indexOf("NOT_ALLOWED")>=0)return"Dat kan alleen de juiste persoon doen.";if(m.indexOf("NO_WISH")>=0||m.indexOf("NO_REM")>=0)return"Dit bestaat niet meer. De lijst is vernieuwd.";if(m.indexOf("MAX_PHOTOS")>=0)return"Maximaal 4 foto's per training.";if(m.indexOf("TOO_BIG")>=0)return"Te veel gegevens voor één training.";return"Er ging iets mis ("+m+"). Probeer opnieuw."}
 async function call(fn,...args){let r;
   try{r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({fn,args:[pin,...args]}),redirect:"follow"})}catch(e){throw new Error("NETWORK")}
   if(!r.ok)throw new Error("HTTP_"+r.status);let j;try{j=await r.json()}catch(e){throw new Error("BAD_RESPONSE")}
   if(!j.ok)throw new Error(j.error||"ERROR");return j.data}
 async function run(fn,args,okMsg){busy++;setStatus("Bezig…");try{const res=await call(fn,...args);busy--;apply(res);setStatus(okMsg)}catch(e){busy--;setStatus(errText(e),true);refresh()}}
-function apply(d){if(!d)return;if(d.shop){S=d.shop;S.settings=S.settings||{}}if(d.dates)DT=d.dates;if(d.partial){renderShop();renderDates();renderHub();return}W=d.workouts||[];C=d.comments||[];G=d.goals||[];P=d.plan||[];TP=d.templates||[];PR=d.profiles||[];B=d.body||[];RC=d.recipes||[];if(d.ntfy)NT=d.ntfy;byId={};W.forEach(w=>byId[w.id]=w);render();
+function apply(d){if(!d)return;if(d.shop){S=d.shop;S.settings=S.settings||{}}if(d.dates)DT=d.dates;if(d.wishes)WS=d.wishes;if(d.reminders)RM=d.reminders;if(d.partial){renderShop();renderDates();renderWish();renderRem();renderHub();return}W=d.workouts||[];C=d.comments||[];G=d.goals||[];P=d.plan||[];TP=d.templates||[];PR=d.profiles||[];B=d.body||[];RC=d.recipes||[];if(d.ntfy)NT=d.ntfy;byId={};W.forEach(w=>byId[w.id]=w);render();
   if(viewId&&$("vSheet").classList.contains("open")){const box=$("vThread");if(!box.contains(document.activeElement))renderThread(box,viewId)}}
 function isPinErr(e){return String(e&&e.message||e).indexOf("PIN_WRONG")>=0}
 async function refresh(){if(!pin||busy)return;
@@ -1368,7 +1505,7 @@ $("pinForm").addEventListener("submit",async e=>{e.preventDefault();const v=$("p
   catch(err){pin=old;$("pinErr").textContent=isPinErr(err)?"Die pincode klopt niet.":errText(err)}});
 
 // ================= RENDER =================
-function render(){renderHero();renderCal();renderWeek();renderGoals();renderWorkoutsLib();renderFeed();renderProgress();renderRecipes();renderShop();renderDates();renderHub()}
+function render(){renderHero();renderCal();renderWeek();renderGoals();renderWorkoutsLib();renderFeed();renderProgress();renderRecipes();renderShop();renderDates();renderWish();renderRem();renderHub()}
 renderWho();showSec(sec,true);try{history.replaceState({sec:"hub"},"");if(sec!=="hub")history.pushState({sec},"")}catch(_){}render();
 if(!pin)askPin(false);else refresh();
 setInterval(()=>{if(document.visibilityState==="visible"&&!document.querySelector(".sheet-bg.open"))refresh()},30000);

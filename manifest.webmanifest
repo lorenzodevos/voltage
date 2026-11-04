@@ -1,13 +1,13 @@
 {
-  "name": "VOLTAGE – Show up.",
+  "name": "VOLTAGE",
   "short_name": "VOLTAGE",
-  "description": "Trainingen loggen, events plannen en elkaar aanmoedigen",
+  "description": "Sport, boodschappen, dates, wishlist en reminders voor Lorenzo & Nele",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0A0710",
-  "theme_color": "#0A0710",
+  "background_color": "#070B12",
+  "theme_color": "#070B12",
   "lang": "nl",
   "icons": [
     {
