@@ -1244,7 +1244,7 @@ function renderDates(){if($("tabDate").hidden)return;
   document.querySelectorAll("[data-dtab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.dtab===dtab)));
   const ideas=DT.filter(d=>d.type==="idea"),plan=DT.filter(d=>d.type==="moment"&&d.status==="planned").sort((a,b)=>a.date.localeCompare(b.date)),
     log=DT.filter(d=>d.type==="moment"&&d.status==="done").sort((a,b)=>b.date.localeCompare(a.date));
-  document.querySelector('[data-dtab="plan"]').textContent=`Gepland${plan.length?" ("+plan.length+")":""}`;
+  document.querySelector('[data-dtab="ideas"]').textContent=`Ideeën${ideas.length?" ("+ideas.length+")":""}`;document.querySelector('[data-dtab="plan"]').textContent=`Gepland${plan.length?" ("+plan.length+")":""}`;document.querySelector('[data-dtab="log"]').textContent=`Herinneringen${log.length?" ("+log.length+")":""}`;
   let h="";
   if(dtab==="ideas"){const cats=Object.keys(DCAT).filter(k=>ideas.some(i=>i.category===k));if(dcat!=="all"&&!cats.includes(dcat))dcat="all";
     const list=ideas.filter(i=>dcat==="all"||i.category===dcat).sort((a,b)=>b.updatedAt-a.updatedAt);
@@ -1259,7 +1259,7 @@ function renderDates(){if($("tabDate").hidden)return;
     h+=plan.length?plan.map(m=>{const d=pd(m.date),past=m.date<TODAY;return `<article class="dplan ${past?"past":""}"><div class="dp-date"><b>${d.getDate()}</b><span>${MN[d.getMonth()]}</span></div>
       <button type="button" class="dp-main" data-editmom="${esc(m.id)}"><span class="dc-cat">${DCAT[m.category]} · ${dayName(d).toLowerCase()} · ${relDay(m.date)}</span><b>${esc(m.title)}</b></button>
       <button class="primary dp-done" data-finish="${esc(m.id)}">${past?"Afronden":"Gedaan"}</button></article>`}).join("")
-      :`<section class="card"><p class="dayempty">Nog niets gepland. Kies een idee en tik op <b>Plannen</b>, of plan meteen iets nieuws.</p></section>`}
+      :`<section class="card"><p class="dayempty">Nog niets gepland. Kies een idee en tik op <b>Plannen</b>, of plan meteen iets nieuws.</p>${ideas.length?`<button type="button" class="linkish" data-dtabgo="ideas">Er ${ideas.length>1?"staan "+ideas.length+" ideeën":"staat 1 idee"} klaar. Bekijk de ideeën ›</button>`:""}</section>`}
   else{h=log.length?`<div class="dlog">${log.map(m=>{const d=pd(m.date);return `<button type="button" class="dmem" data-viewmom="${esc(m.id)}">${m.photos.length?`<div class="rimg load dm-cover" data-photo="${esc(m.photos[0])}"></div>`:`<div class="dm-cover nophoto"><span>♥</span></div>`}
       <div class="dm-txt"><span class="dc-cat">${dayName(d)} ${fd(d)} ${d.getFullYear()} · ${DCAT[m.category]}</span><b>${esc(m.title)}</b><span class="hearts ro">${hearts(m.rating)}</span>${m.memory?`<span class="dc-note">${esc(m.memory)}</span>`:""}${m.photos.length>1?`<span class="dm-n">${m.photos.length} foto's</span>`:""}</div></button>`}).join("")}</div>`
       :`<section class="card"><p class="dayempty">Hier komen jullie herinneringen. Rond een geplande date af met foto's en een paar woorden.</p></section>`}
@@ -1267,6 +1267,7 @@ function renderDates(){if($("tabDate").hidden)return;
 document.querySelectorAll("[data-dtab]").forEach(b=>b.addEventListener("click",()=>{dtab=b.dataset.dtab;try{localStorage.setItem("voltage-dtab",dtab)}catch(_){}renderDates()}));
 $("dateBody").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
   if(d.dcat){dcat=d.dcat;renderDates();return}
+  if(d.dtabgo){dtab=d.dtabgo;try{localStorage.setItem("voltage-dtab",dtab)}catch(_){}renderDates();return}
   if(d.da==="newidea")return openIdea(null);
   if(d.da==="newplan")return openMoment({status:"planned"});
   if(d.da==="random")return surprise();
@@ -1493,12 +1494,17 @@ async function call(fn,...args){let r;
   if(!r.ok)throw new Error("HTTP_"+r.status);let j;try{j=await r.json()}catch(e){throw new Error("BAD_RESPONSE")}
   if(!j.ok)throw new Error(j.error||"ERROR");return j.data}
 async function run(fn,args,okMsg){busy++;setStatus("Bezig…");try{const res=await call(fn,...args);busy--;apply(res);setStatus(okMsg)}catch(e){busy--;setStatus(errText(e),true);refresh()}}
-function apply(d){if(!d)return;if(d.shop){S=d.shop;S.settings=S.settings||{}}if(d.dates)DT=d.dates;if(d.wishes)WS=d.wishes;if(d.reminders)RM=d.reminders;if(d.partial){renderShop();renderDates();renderWish();renderRem();renderHub();return}W=d.workouts||[];C=d.comments||[];G=d.goals||[];P=d.plan||[];TP=d.templates||[];PR=d.profiles||[];B=d.body||[];RC=d.recipes||[];if(d.ntfy)NT=d.ntfy;byId={};W.forEach(w=>byId[w.id]=w);render();
+function apply(d){if(!d)return;if(d.shop){S=d.shop;S.settings=S.settings||{}}if(d.dates)DT=d.dates;if(d.wishes)WS=d.wishes;if(d.reminders)RM=d.reminders;if(!fromCache)saveCache();if(d.partial){renderShop();renderDates();renderWish();renderRem();renderHub();return}W=d.workouts||[];C=d.comments||[];G=d.goals||[];P=d.plan||[];TP=d.templates||[];PR=d.profiles||[];B=d.body||[];RC=d.recipes||[];if(d.ntfy)NT=d.ntfy;byId={};W.forEach(w=>byId[w.id]=w);render();
   if(viewId&&$("vSheet").classList.contains("open")){const box=$("vThread");if(!box.contains(document.activeElement))renderThread(box,viewId)}}
+// Laatst opgehaalde gegevens bewaren, zodat de app na vernieuwen meteen alles toont
+const CACHE_KEY="voltage-cache-v1";let cacheT=null,cacheAt=0,fromCache=false;
+function saveCache(){clearTimeout(cacheT);cacheT=setTimeout(()=>{try{cacheAt=Date.now();localStorage.setItem(CACHE_KEY,JSON.stringify({t:cacheAt,d:{workouts:W,comments:C,goals:G,plan:P,templates:TP,profiles:PR,body:B,recipes:RC,ntfy:NT,shop:S,dates:DT,wishes:WS,reminders:RM}}))}catch(_){}},400)}
+function loadCache(){try{const c=JSON.parse(localStorage.getItem(CACHE_KEY)||"null");if(!c||!c.d||!pin)return false;fromCache=true;cacheAt=c.t||0;apply(c.d);fromCache=false;return true}catch(_){fromCache=false;return false}}
+function hhmm(t){const d=new Date(t);return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")}
 function isPinErr(e){return String(e&&e.message||e).indexOf("PIN_WRONG")>=0}
 async function refresh(){if(!pin||busy)return;
   try{apply(await call("getData"));checkDraft();const s=$("status");if(s.classList.contains("warn")||/laden/.test(s.textContent))idleStatus()}
-  catch(e){if(isPinErr(e))askPin(true);else setStatus(errText(e),true)}}
+  catch(e){if(isPinErr(e)){try{localStorage.removeItem(CACHE_KEY)}catch(_){}askPin(true)}else setStatus(errText(e)+(cacheAt?" Je ziet de gegevens van "+hhmm(cacheAt)+".":""),true)}}
 function askPin(wrong){$("gate").classList.add("open");$("pinErr").textContent=wrong?"Die pincode klopt niet.":"";$("pinIn").value="";setTimeout(()=>$("pinIn").focus(),50)}
 $("pinForm").addEventListener("submit",async e=>{e.preventDefault();const v=$("pinIn").value.trim();if(!v)return;$("pinErr").textContent="Controleren…";
   const old=pin;pin=v;try{await call("checkPin");try{localStorage.setItem("knokke-pin",v)}catch(e){}$("gate").classList.remove("open");refresh()}
@@ -1506,7 +1512,8 @@ $("pinForm").addEventListener("submit",async e=>{e.preventDefault();const v=$("p
 
 // ================= RENDER =================
 function render(){renderHero();renderCal();renderWeek();renderGoals();renderWorkoutsLib();renderFeed();renderProgress();renderRecipes();renderShop();renderDates();renderWish();renderRem();renderHub()}
-renderWho();showSec(sec,true);try{history.replaceState({sec:"hub"},"");if(sec!=="hub")history.pushState({sec},"")}catch(_){}render();
+renderWho();showSec(sec,true);try{history.replaceState({sec:"hub"},"");if(sec!=="hub")history.pushState({sec},"")}catch(_){}
+if(loadCache())setStatus("Nieuwe gegevens laden…");else render();
 if(!pin)askPin(false);else refresh();
 setInterval(()=>{if(document.visibilityState==="visible"&&!document.querySelector(".sheet-bg.open"))refresh()},30000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refresh()});
