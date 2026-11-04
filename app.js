@@ -802,9 +802,10 @@ function renderWorkoutsLib(){const box=$("wlib");if(!box)return;
 
 // ================= TABBLADEN =================
 let tab="train";try{tab=localStorage.getItem("voltage-tab")||"train"}catch(_){}
-function showTab(t){tab=t;try{localStorage.setItem("voltage-tab",t)}catch(_){}
+function showTab(t){if(!["train","prog","rec"].includes(t))t="train";tab=t;try{localStorage.setItem("voltage-tab",t)}catch(_){}
   document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
-  $("tabTrain").hidden=t!=="train";$("tabProg").hidden=t!=="prog";$("tabRec").hidden=t!=="rec";$("tabShop").hidden=t!=="shop";if(t==="prog")renderProgress();if(t==="rec")renderRecipes();if(t==="shop"){renderShop(true);refreshShop()}}
+  const sp=typeof sec==="undefined"||sec==="sport";
+  $("tabTrain").hidden=!sp||t!=="train";$("tabProg").hidden=!sp||t!=="prog";$("tabRec").hidden=!sp||t!=="rec";if(sp&&t==="prog")renderProgress();if(sp&&t==="rec")renderRecipes()}
 document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>{showTab(b.dataset.tab);window.scrollTo({top:$("tabTrain").offsetTop-80,behavior:"smooth"})}));
 
 // ================= PROGRESS / DASHBOARD =================
@@ -1189,7 +1190,140 @@ $("saForm").addEventListener("submit",async e=>{e.preventDefault();const it={nam
   if($("saKeep").checked){const r=await shopRun("saveProduct",[Object.assign({fixed:$("saFixed").checked},it)],"Bezig…");if(!r)return;it.productId=r.savedId}
   const lid=await ensureList();if(!lid)return;
   await shopRun("addListItems",[lid,[it]],`${it.name} staat op de lijst.`);$("saName").value="";$("saQty").value="1";$("saUnit").value="";renderAdd();$("saName").focus()});
-setInterval(()=>{if(document.visibilityState==="visible"&&tab==="shop"&&stab==="list"&&!document.querySelector(".sheet-bg.open")&&!Object.keys(pend).length)refreshShop()},12000);
+setInterval(()=>{if(document.visibilityState==="visible"&&sec==="shop"&&stab==="list"&&!document.querySelector(".sheet-bg.open")&&!Object.keys(pend).length)refreshShop()},12000);
+
+// ================= SECTIES (startpagina, sport, shop, daten) =================
+const SECS={hub:{name:"",theme:"#0A0710"},sport:{name:"Sport",theme:"#0B0B0C"},shop:{name:"Shop",theme:"#0B2A5B"},date:{name:"Daten & Eten",theme:"#1A0508"}};
+let sec="hub";try{const v=localStorage.getItem("voltage-sec");if(SECS[v])sec=v}catch(_){}
+function showSec(s,fromPop){if(!SECS[s])s="hub";const prev=sec;sec=s;try{localStorage.setItem("voltage-sec",s)}catch(_){}
+  document.body.dataset.sec=s;$("metaTheme").setAttribute("content",SECS[s].theme);
+  $("hub").hidden=s!=="hub";$("secbar").hidden=s==="hub";$("secName").textContent=SECS[s].name;
+  document.querySelector(".tabs").hidden=s!=="sport";$("eventCard").hidden=s!=="sport";
+  $("tabShop").hidden=s!=="shop";$("tabDate").hidden=s!=="date";
+  showTab(tab);
+  if(s==="shop"){renderShop(true);refreshShop()}
+  if(s==="date")renderDates();
+  if(s==="hub")renderHub();
+  if(!fromPop&&prev!==s){try{if(s==="hub")history.replaceState({sec:"hub"},"");else history.pushState({sec:s},"")}catch(_){}}
+  window.scrollTo(0,0)}
+window.addEventListener("popstate",e=>{if(document.querySelector(".sheet-bg.open")){const o=[...document.querySelectorAll(".sheet-bg.open")].pop();o.id==="wSheet"?requestCloseEditor():closeSheet(o.id);try{history.pushState({sec},"")}catch(_){}return}
+  showSec((e.state&&e.state.sec)||"hub",true)});
+document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>showSec(b.dataset.go)));
+$("btnHome").addEventListener("click",()=>{if(history.state&&history.state.sec&&history.state.sec!=="hub")history.back();else showSec("hub")});
+function renderHub(){if($("hub").hidden)return;
+  const next=allGoals().find(g=>g.date>=TODAY);
+  if(next){const n=Math.round((pd(next.date)-T0)/864e5);$("hubSportBig").textContent=n===0?"GO":n+(n===1?" dag":" dagen");$("hubSport").textContent="tot "+next.title}
+  else{$("hubSportBig").textContent="Show up.";$("hubSport").textContent="Training, progress en recepten"}
+  const l=S.lists.find(x=>x.week===iso(monday(T0)));
+  if(l){const it=S.items.filter(i=>i.listId===l.id),open=it.filter(i=>!i.checked).length;$("hubShopBig").textContent=open?open+" te halen":"Alles in huis";$("hubShop").textContent=`Lijst van deze week · ${it.length-open}/${it.length} in de kar`}
+  else{$("hubShopBig").textContent="Nieuwe week";$("hubShop").textContent=S.products.some(p=>p.fixed)?"Tik om je lijst te genereren":"Boodschappen en budget"}
+  const up=DT.filter(d=>d.type==="moment"&&d.status==="planned"&&d.date>=TODAY).sort((a,b)=>a.date.localeCompare(b.date))[0];
+  const ideas=DT.filter(d=>d.type==="idea").length;
+  if(up){const n=Math.round((pd(up.date)-T0)/864e5);$("hubDateBig").textContent=n===0?"Vandaag":n===1?"Morgen":"Over "+n+" dagen";$("hubDate").textContent=up.title}
+  else{$("hubDateBig").textContent=ideas?ideas+" idee"+(ideas>1?"ën":""):"Plan iets";$("hubDate").textContent=ideas?"Klaar om te kiezen":"Ideeën, plannen en herinneringen"}}
+
+// ================= DATEN & ETEN =================
+const DCAT={datenight:"Date night",uitstap:"Uitstap",restaurant:"Uit eten",thuis:"Thuis",reis:"Weekend & reizen",overig:"Overig"};
+const COSTL=["Gratis","€","€€","€€€"];
+let DT=[],dtab="ideas",dcat="all",diEdit=null,dm=null,rnPick=null;
+try{dtab=localStorage.getItem("voltage-dtab")||"ideas"}catch(_){}
+const dById=id=>DT.find(d=>d.id===id);
+function relDay(ds){const n=Math.round((pd(ds)-T0)/864e5);return n===0?"vandaag":n===1?"morgen":n===-1?"gisteren":n>1?`over ${n} dagen`:`${-n} dagen geleden`}
+function hearts(n){return n?"♥".repeat(n)+`<span class="off">${"♥".repeat(5-n)}</span>`:""}
+function renderDates(){if($("tabDate").hidden)return;
+  document.querySelectorAll("[data-dtab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.dtab===dtab)));
+  const ideas=DT.filter(d=>d.type==="idea"),plan=DT.filter(d=>d.type==="moment"&&d.status==="planned").sort((a,b)=>a.date.localeCompare(b.date)),
+    log=DT.filter(d=>d.type==="moment"&&d.status==="done").sort((a,b)=>b.date.localeCompare(a.date));
+  document.querySelector('[data-dtab="plan"]').textContent=`Gepland${plan.length?" ("+plan.length+")":""}`;
+  let h="";
+  if(dtab==="ideas"){const cats=Object.keys(DCAT).filter(k=>ideas.some(i=>i.category===k));if(dcat!=="all"&&!cats.includes(dcat))dcat="all";
+    const list=ideas.filter(i=>dcat==="all"||i.category===dcat).sort((a,b)=>b.updatedAt-a.updatedAt);
+    h=`<div class="date-actions"><button class="primary" data-da="newidea">+ Nieuw idee</button>${ideas.length?`<button class="textbtn surprise" data-da="random">Verras ons</button>`:""}</div>`;
+    if(cats.length>1)h+=`<div class="phasechips">${[["all","Alles"]].concat(cats.map(k=>[k,DCAT[k]])).map(([k,l])=>`<button type="button" data-dcat="${k}" aria-pressed="${dcat===k}">${l}</button>`).join("")}</div>`;
+    h+=list.length?`<div class="dgrid">${list.map(i=>{const times=DT.filter(m=>m.ideaId===i.id&&m.status==="done").length;
+      return `<article class="dcard"><button type="button" class="dc-main" data-editidea="${esc(i.id)}"><span class="dc-cat">${DCAT[i.category]}${i.cost!=null?" · "+COSTL[i.cost]:""}</span><b>${esc(i.title)}</b>${i.note?`<span class="dc-note">${esc(i.note)}</span>`:""}<span class="dc-by">${i.createdBy&&NAMES[i.createdBy]?"Idee van "+NAMES[i.createdBy]:""}${times?` · ${times}× gedaan`:""}</span></button>
+      ${i.link?`<a class="dc-link" href="${/^https?:\/\//i.test(i.link)?esc(i.link):"https://www.google.com/maps/search/"+encodeURIComponent(i.link)}" target="_blank" rel="noopener">${/^https?:\/\//i.test(i.link)?"Link openen":"Op de kaart"}</a>`:""}
+      <div class="dc-btns"><button class="textbtn" data-planidea="${esc(i.id)}">Plannen</button><button class="textbtn" data-doneidea="${esc(i.id)}">Gedaan</button></div></article>`}).join("")}</div>`
+      :`<section class="card"><p class="dayempty">${ideas.length?"Geen ideeën in deze soort.":"Nog geen ideeën. Zet hier alles wat jullie ooit samen willen doen: een restaurant, een wandeling, een citytrip, een filmavond…"}</p></section>`}
+  else if(dtab==="plan"){h=`<div class="date-actions"><button class="primary" data-da="newplan">+ Date plannen</button></div>`;
+    h+=plan.length?plan.map(m=>{const d=pd(m.date),past=m.date<TODAY;return `<article class="dplan ${past?"past":""}"><div class="dp-date"><b>${d.getDate()}</b><span>${MN[d.getMonth()]}</span></div>
+      <button type="button" class="dp-main" data-editmom="${esc(m.id)}"><span class="dc-cat">${DCAT[m.category]} · ${dayName(d).toLowerCase()} · ${relDay(m.date)}</span><b>${esc(m.title)}</b></button>
+      <button class="primary dp-done" data-finish="${esc(m.id)}">${past?"Afronden":"Gedaan"}</button></article>`}).join("")
+      :`<section class="card"><p class="dayempty">Nog niets gepland. Kies een idee en tik op <b>Plannen</b>, of plan meteen iets nieuws.</p></section>`}
+  else{h=log.length?`<div class="dlog">${log.map(m=>{const d=pd(m.date);return `<button type="button" class="dmem" data-viewmom="${esc(m.id)}">${m.photos.length?`<div class="rimg load dm-cover" data-photo="${esc(m.photos[0])}"></div>`:`<div class="dm-cover nophoto"><span>♥</span></div>`}
+      <div class="dm-txt"><span class="dc-cat">${dayName(d)} ${fd(d)} ${d.getFullYear()} · ${DCAT[m.category]}</span><b>${esc(m.title)}</b><span class="hearts ro">${hearts(m.rating)}</span>${m.memory?`<span class="dc-note">${esc(m.memory)}</span>`:""}${m.photos.length>1?`<span class="dm-n">${m.photos.length} foto's</span>`:""}</div></button>`}).join("")}</div>`
+      :`<section class="card"><p class="dayempty">Hier komen jullie herinneringen. Rond een geplande date af met foto's en een paar woorden.</p></section>`}
+  $("dateBody").innerHTML=h;hydratePhotos($("dateBody"))}
+document.querySelectorAll("[data-dtab]").forEach(b=>b.addEventListener("click",()=>{dtab=b.dataset.dtab;try{localStorage.setItem("voltage-dtab",dtab)}catch(_){}renderDates()}));
+$("dateBody").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;const d=b.dataset;
+  if(d.dcat){dcat=d.dcat;renderDates();return}
+  if(d.da==="newidea")return openIdea(null);
+  if(d.da==="newplan")return openMoment({status:"planned"});
+  if(d.da==="random")return surprise();
+  if(d.editidea)return openIdea(d.editidea);
+  if(d.planidea)return openMoment({idea:dById(d.planidea),status:"planned"});
+  if(d.doneidea)return openMoment({idea:dById(d.doneidea),status:"done"});
+  if(d.editmom)return openMoment({id:d.editmom});
+  if(d.finish)return openMoment({id:d.finish,status:"done"});
+  if(d.viewmom)return viewMoment(d.viewmom)});
+async function dateRun(fn,args,msg){busy++;setStatus("Bezig…");try{const r=await call(fn,...args);busy--;apply(r);setStatus(msg);return r}catch(e){busy--;setStatus(errText(e),true);refresh();return null}}
+// --- idee ---
+function openIdea(id){const i=id?dById(id):null;diEdit=id;$("diTitle").textContent=i?"Idee bewerken":"Nieuw idee";
+  $("diName").value=i?i.title:"";$("diCat").value=i?i.category:(dcat!=="all"?dcat:"datenight");$("diCost").value=i&&i.cost!=null?String(i.cost):"";
+  $("diLink").value=i?i.link:"";$("diNote").value=i?i.note:"";$("diDel").style.visibility=i?"visible":"hidden";openSheet("diSheet");setTimeout(()=>$("diName").focus(),60)}
+$("diForm").addEventListener("submit",async e=>{e.preventDefault();const old=diEdit?dById(diEdit):null;
+  const it={id:diEdit,type:"idea",title:$("diName").value.trim(),category:$("diCat").value,cost:$("diCost").value===""?null:+$("diCost").value,link:$("diLink").value.trim(),note:$("diNote").value.trim(),createdBy:old?old.createdBy:(who||"")};
+  if(!it.title)return;closeSheet("diSheet");const r=await dateRun("saveDate",[it],old?"Idee opgeslagen.":"Idee toegevoegd.");
+  if(r&&!old&&who)push(other(),`${NAMES[who]} heeft een date-idee`,it.title)});
+$("diDel").addEventListener("click",async()=>{const i=dById(diEdit);if(!i||!(await ask(`Idee “${i.title}” verwijderen? Herinneringen die ervan komen blijven bewaard.`,{title:"Verwijderen?",ok:"Ja, verwijder",danger:true})))return;closeSheet("diSheet");await dateRun("deleteDate",[i.id],"Idee verwijderd.")});
+// --- verras ons ---
+function surprise(){const pool=DT.filter(d=>d.type==="idea"&&(dcat==="all"||d.category===dcat));if(!pool.length)return;
+  let p=pool[Math.floor(Math.random()*pool.length)];if(pool.length>1&&rnPick&&p.id===rnPick.id)p=pool.find(x=>x.id!==rnPick.id);rnPick=p;
+  $("rnTitle").textContent=p.title;$("rnSub").textContent=[DCAT[p.category],p.cost!=null?COSTL[p.cost]:"",p.note].filter(Boolean).join(" · ");
+  $("rnAgain").hidden=pool.length<2;openSheet("rnSheet")}
+$("rnAgain").addEventListener("click",surprise);
+$("rnPlan").addEventListener("click",()=>{closeSheet("rnSheet");if(rnPick)openMoment({idea:rnPick,status:"planned"})});
+// --- plannen / afronden ---
+function nextSat(){let d=T0;while(d.getDay()!==6)d=addDays(d,1);return iso(d)}
+function openMoment(o){const m=o.id?dById(o.id):null,idea=o.idea||(m&&m.ideaId?dById(m.ideaId):null);
+  dm={id:m?m.id:null,ideaId:m?m.ideaId:(idea?idea.id:""),status:o.status||(m?m.status:"planned"),rating:m?m.rating:null,staged:[],createdBy:m?m.createdBy:(who||"")};
+  $("dmName").value=m?m.title:(idea?idea.title:"");$("dmCat").value=m?m.category:(idea?idea.category:"datenight");
+  $("dmDate").value=m?(o.status==="done"&&m.date>TODAY?TODAY:m.date):(dm.status==="done"?TODAY:nextSat());
+  $("dmMem").value=m?m.memory:"";$("dmKeep").checked=true;
+  $("dmTitle").textContent=m?(dm.status==="done"&&m.status==="planned"?"Date afronden":m.status==="done"?"Herinnering bewerken":"Date bewerken"):(dm.status==="done"?"We hebben het gedaan":"Date plannen");
+  $("dmSub").textContent=idea&&!m?"Uit jullie ideeënlijst":"";$("dmDel").style.visibility=m?"visible":"hidden";
+  syncDm();openSheet("dmSheet")}
+function syncDm(){document.querySelectorAll("[data-dst]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.dst===dm.status)));
+  $("dmDone").hidden=dm.status!=="done";
+  document.querySelectorAll("#dmRate button").forEach(b=>b.setAttribute("aria-pressed",String(+b.dataset.r<=(dm.rating||0))));
+  const old=dm.id?dById(dm.id):null;$("dmKeepWrap").hidden=!(dm.ideaId&&dById(dm.ideaId)&&!(old&&old.status==="done"));
+  const box=$("dmPhotos");box.innerHTML="";const ex=old?old.photos:[];
+  ex.forEach(f=>box.appendChild(photoTile(null,f,async()=>{if(!(await ask("Deze foto verwijderen?",{title:"Verwijderen?",ok:"Ja, verwijder",danger:true})))return;await dateRun("removeDatePhoto",[dm.id,f],"Foto verwijderd.");syncDm()})));
+  dm.staged.forEach((u,k)=>box.appendChild(photoTile(u,null,()=>{dm.staged.splice(k,1);syncDm()})));
+  if(ex.length+dm.staged.length<12){const b=document.createElement("button");b.type="button";b.className="addph";b.innerHTML="<span>+ Foto</span>";
+    b.addEventListener("click",async()=>{const fs=(await pickPhotos(true)).slice(0,12-ex.length-dm.staged.length);for(const f of fs){try{dm.staged.push(await resize(f))}catch(_){setStatus("Die foto kon niet gelezen worden.",true)}}syncDm()});box.appendChild(b)}}
+document.querySelectorAll("[data-dst]").forEach(b=>b.addEventListener("click",()=>{dm.status=b.dataset.dst;if(dm.status==="done"&&$("dmDate").value>TODAY)$("dmDate").value=TODAY;syncDm()}));
+document.querySelectorAll("#dmRate button").forEach(b=>b.addEventListener("click",()=>{dm.rating=dm.rating===+b.dataset.r?null:+b.dataset.r;syncDm()}));
+$("dmForm").addEventListener("submit",async e=>{e.preventDefault();const old=dm.id?dById(dm.id):null;
+  const it={id:dm.id,type:"moment",ideaId:dm.ideaId,title:$("dmName").value.trim(),category:$("dmCat").value,date:$("dmDate").value,status:dm.status,
+    rating:dm.status==="done"?dm.rating:null,memory:dm.status==="done"?$("dmMem").value.trim():"",createdBy:dm.createdBy,removeIdea:dm.status==="done"&&!$("dmKeepWrap").hidden&&!$("dmKeep").checked};
+  if(!it.title||!it.date)return;const staged=dm.staged.slice();closeSheet("dmSheet");busy++;setStatus("Opslaan…");
+  try{let r=await call("saveDate",it);const id=r.savedId;
+    for(let k=0;k<staged.length;k++){setStatus(`Foto ${k+1} van ${staged.length} opladen…`);r=await call("uploadDatePhoto",id,staged[k])}
+    busy--;apply(r);const nowDone=it.status==="done"&&!(old&&old.status==="done");
+    if(nowDone){dtab="log";try{localStorage.setItem("voltage-dtab","log")}catch(_){}}else if(it.status==="planned"&&!old){dtab="plan"}
+    renderDates();setStatus(nowDone?"Herinnering bewaard.":"Opgeslagen.");
+    if(who&&!old&&it.status==="planned")push(other(),`${NAMES[who]} plande een date`,`${it.title} · ${dayName(pd(it.date)).toLowerCase()} ${fd(pd(it.date))}`);
+    if(who&&nowDone)push(other(),"Nieuwe herinnering",`${it.title}${staged.length?` · ${staged.length} foto${staged.length>1?"'s":""}`:""}`)}
+  catch(err){busy--;setStatus(errText(err),true);refresh()}});
+$("dmDel").addEventListener("click",async()=>{const m=dById(dm.id);if(!m||!(await ask(`“${m.title}” verwijderen?${m.photos.length?" De foto's verdwijnen ook.":""}`,{title:"Verwijderen?",ok:"Ja, verwijder",danger:true})))return;closeSheet("dmSheet");await dateRun("deleteDate",[m.id],"Verwijderd.")});
+// --- herinnering bekijken ---
+let dvId=null;
+function viewMoment(id){const m=dById(id);if(!m)return;dvId=id;const d=pd(m.date);
+  $("dvTitle").textContent=m.title;$("dvSub").textContent=`${dayName(d)} ${fd(d)} ${d.getFullYear()} · ${DCAT[m.category]}`;
+  $("dvRate").innerHTML=hearts(m.rating);$("dvMem").innerHTML=m.memory?`<div class="vnote">${esc(m.memory)}</div>`:"";
+  const g=$("dvPhotos");g.innerHTML="";m.photos.forEach(f=>g.appendChild(photoTile(null,f)));openSheet("dvSheet")}
+$("dvEdit").addEventListener("click",()=>{closeSheet("dvSheet");openMoment({id:dvId})});
 
 // ================= EIGEN BEVESTIGINGSVENSTER =================
 function ask(text,o={}){return new Promise(res=>{
@@ -1205,16 +1339,16 @@ function ask(text,o={}){return new Promise(res=>{
 function openSheet(id){$(id).classList.add("open")}
 function closeSheet(id){$(id).classList.remove("open");if(id==="vSheet")viewId=null}
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>b.dataset.close==="wSheet"?requestCloseEditor():closeSheet(b.dataset.close)));
-["wSheet","vSheet","gSheet","plSheet","impSheet","xSheet","pfSheet","rvSheet","reSheet","rpSheet","psSheet","saSheet","pdSheet","bgSheet"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))id==="wSheet"?requestCloseEditor():closeSheet(id)}));
+["wSheet","vSheet","gSheet","plSheet","impSheet","xSheet","pfSheet","rvSheet","reSheet","rpSheet","psSheet","saSheet","pdSheet","bgSheet","diSheet","dmSheet","dvSheet","rnSheet"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))id==="wSheet"?requestCloseEditor():closeSheet(id)}));
 $("pSheet").addEventListener("click",e=>{if(e.target===$("pSheet"))closePicker()});
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;
   if($("lightbox").classList.contains("open")){$("lightbox").classList.remove("open");return}
   if($("pSheet").classList.contains("open")){closePicker();return}
-  for(const id of ["psSheet","bgSheet","pdSheet","saSheet","xSheet","rpSheet","reSheet","rvSheet","pfSheet","impSheet","gSheet","plSheet","wSheet","vSheet"])if($(id).classList.contains("open")){id==="wSheet"?requestCloseEditor():closeSheet(id);return}});
+  for(const id of ["psSheet","rnSheet","dvSheet","dmSheet","diSheet","bgSheet","pdSheet","saSheet","xSheet","rpSheet","reSheet","rvSheet","pfSheet","impSheet","gSheet","plSheet","wSheet","vSheet"])if($(id).classList.contains("open")){id==="wSheet"?requestCloseEditor():closeSheet(id);return}});
 
 // ================= SERVER =================
 let stTimer=null,busy=0;
-function setStatus(msg,warn){const el=$("status");el.textContent=msg;const b=/…$/.test(msg);el.className="status"+(warn?" warn":b?" busy":"");document.querySelectorAll(".status-mirror").forEach(x=>{x.textContent=msg;x.className="status status-mirror"+(warn?" warn":b?" busy":"")});clearTimeout(stTimer);if(!warn&&!b)stTimer=setTimeout(idleStatus,4000)}
+function setStatus(msg,warn){if(typeof warn==="undefined")warn=false;const el=$("status");el.textContent=msg;const b=/…$/.test(msg);el.className="status"+(warn?" warn":b?" busy":"");document.querySelectorAll(".status-mirror").forEach(x=>{x.textContent=msg;x.className="status status-mirror"+(warn?" warn":b?" busy":"")});clearTimeout(stTimer);if(!warn&&!b)stTimer=setTimeout(idleStatus,4000)}
 function idleStatus(){if(!pin)return;setStatus(who?"Gedeeld: de ander ziet je trainingen en reacties binnen een halve minuut.":"Tik bovenaan op je naam om te beginnen.")}
 function errText(e){const m=String(e&&e.message||e);if(m.includes("NO_LIST")||m.includes("NO_ITEM"))return"Dit staat niet meer op de lijst. De lijst is vernieuwd.";if(m==="NETWORK")return"Geen verbinding met de server. Controleer je internet.";if(m==="BAD_RESPONSE"||m==="UNKNOWN_FN")return"De server heeft nog de oude versie: publiceer in Apps Script een nieuwe versie.";if(m.indexOf("MAX_PHOTOS")>=0)return"Maximaal 4 foto's per training.";if(m.indexOf("TOO_BIG")>=0)return"Te veel gegevens voor één training.";return"Er ging iets mis ("+m+"). Probeer opnieuw."}
 async function call(fn,...args){let r;
@@ -1222,7 +1356,7 @@ async function call(fn,...args){let r;
   if(!r.ok)throw new Error("HTTP_"+r.status);let j;try{j=await r.json()}catch(e){throw new Error("BAD_RESPONSE")}
   if(!j.ok)throw new Error(j.error||"ERROR");return j.data}
 async function run(fn,args,okMsg){busy++;setStatus("Bezig…");try{const res=await call(fn,...args);busy--;apply(res);setStatus(okMsg)}catch(e){busy--;setStatus(errText(e),true);refresh()}}
-function apply(d){if(!d)return;if(d.shop){S=d.shop;S.settings=S.settings||{}}if(d.partial){renderShop();return}W=d.workouts||[];C=d.comments||[];G=d.goals||[];P=d.plan||[];TP=d.templates||[];PR=d.profiles||[];B=d.body||[];RC=d.recipes||[];if(d.ntfy)NT=d.ntfy;byId={};W.forEach(w=>byId[w.id]=w);render();
+function apply(d){if(!d)return;if(d.shop){S=d.shop;S.settings=S.settings||{}}if(d.dates)DT=d.dates;if(d.partial){renderShop();renderDates();renderHub();return}W=d.workouts||[];C=d.comments||[];G=d.goals||[];P=d.plan||[];TP=d.templates||[];PR=d.profiles||[];B=d.body||[];RC=d.recipes||[];if(d.ntfy)NT=d.ntfy;byId={};W.forEach(w=>byId[w.id]=w);render();
   if(viewId&&$("vSheet").classList.contains("open")){const box=$("vThread");if(!box.contains(document.activeElement))renderThread(box,viewId)}}
 function isPinErr(e){return String(e&&e.message||e).indexOf("PIN_WRONG")>=0}
 async function refresh(){if(!pin||busy)return;
@@ -1234,8 +1368,8 @@ $("pinForm").addEventListener("submit",async e=>{e.preventDefault();const v=$("p
   catch(err){pin=old;$("pinErr").textContent=isPinErr(err)?"Die pincode klopt niet.":errText(err)}});
 
 // ================= RENDER =================
-function render(){renderHero();renderCal();renderWeek();renderGoals();renderWorkoutsLib();renderFeed();renderProgress();renderRecipes();renderShop()}
-renderWho();showTab(tab);render();
+function render(){renderHero();renderCal();renderWeek();renderGoals();renderWorkoutsLib();renderFeed();renderProgress();renderRecipes();renderShop();renderDates();renderHub()}
+renderWho();showSec(sec,true);try{history.replaceState({sec:"hub"},"");if(sec!=="hub")history.pushState({sec},"")}catch(_){}render();
 if(!pin)askPin(false);else refresh();
 setInterval(()=>{if(document.visibilityState==="visible"&&!document.querySelector(".sheet-bg.open"))refresh()},30000);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")refresh()});

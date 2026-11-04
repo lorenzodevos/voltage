@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0B0B0C">
+<meta name="theme-color" content="#0A0710" id="metaTheme">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,12 +17,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
-<body>
+<body data-sec="hub">
 <header class="hero">
   <div class="wrap">
     <div class="brand-row">
       <div class="brand">
-        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M37 2 18 37h12l-5 25 21-36H34L42 2z" fill="#D4FF00"/></svg>
+        <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M37 2 18 37h12l-5 25 21-36H34L42 2z" fill="currentColor"/></svg>
         <div><h1>VOLTAGE</h1><p class="tag">Show up.</p></div>
       </div>
       <button class="ev" id="eventCard" aria-label="Naar doelen en planning">
@@ -41,14 +41,33 @@
   </div>
 </header>
 
+<div class="secbar wrap" id="secbar" hidden>
+  <button type="button" class="homebtn" id="btnHome" aria-label="Terug naar de startpagina"><span aria-hidden="true">‹</span> Home</button>
+  <span class="secname" id="secName"></span>
+</div>
+
+<main class="wrap" id="hub">
+  <p class="hub-q">Waar gaan we vandaag naartoe?</p>
+  <div class="hub-tiles">
+    <button type="button" class="hub-tile t-sport" data-go="sport">
+      <span class="ht-k">Sport</span><span class="ht-big" id="hubSportBig">–</span><span class="ht-s" id="hubSport">Training, progress en recepten</span>
+    </button>
+    <button type="button" class="hub-tile t-shop" data-go="shop">
+      <span class="ht-k">Shop</span><span class="ht-big" id="hubShopBig">–</span><span class="ht-s" id="hubShop">Boodschappen en budget</span>
+    </button>
+    <button type="button" class="hub-tile t-date" data-go="date">
+      <span class="ht-k">Daten &amp; Eten</span><span class="ht-big" id="hubDateBig">–</span><span class="ht-s" id="hubDate">Ideeën, plannen en herinneringen</span>
+    </button>
+  </div>
+</main>
+
 <nav class="tabs wrap" role="tablist" aria-label="Onderdelen">
   <button role="tab" data-tab="train" aria-selected="true">Training</button>
   <button role="tab" data-tab="prog" aria-selected="false">Progress</button>
   <button role="tab" data-tab="rec" aria-selected="false">Recepten</button>
-  <button role="tab" data-tab="shop" aria-selected="false" aria-label="Boodschappen"><span class="t-lg">Boodschappen</span><span class="t-sm">Shop</span></button>
 </nav>
 
-<main class="wrap" id="tabTrain">
+<main class="wrap" id="tabTrain" hidden>
   <section class="card tide" aria-labelledby="cal-h">
     <div class="card-head">
       <h2 id="cal-h">Kalender</h2>
@@ -162,7 +181,6 @@
 
 <main class="wrap" id="tabShop" hidden>
   <section class="card">
-    <div class="card-head"><h2>Boodschappen</h2></div>
     <div class="phasetabs subtabs" role="tablist" aria-label="Boodschappen">
       <button role="tab" data-stab="list" aria-selected="true">Wekelijkse lijst</button>
       <button role="tab" data-stab="prod" aria-selected="false">Producten</button>
@@ -205,7 +223,19 @@
   <datalist id="storeList"></datalist>
 </main>
 
-<p class="appver wrap">VOLTAGE · versie 19 · <button type="button" id="btnRefresh">App vernieuwen</button> · <button type="button" id="btnPushTest">Test meldingen</button></p>
+<main class="wrap" id="tabDate" hidden>
+  <section class="card">
+    <div class="phasetabs subtabs" role="tablist" aria-label="Daten en eten">
+      <button role="tab" data-dtab="ideas" aria-selected="true">Ideeën</button>
+      <button role="tab" data-dtab="plan" aria-selected="false">Gepland</button>
+      <button role="tab" data-dtab="log" aria-selected="false">Herinneringen</button>
+    </div>
+    <p class="status status-mirror" id="dateStatus"></p>
+  </section>
+  <div id="dateBody"></div>
+</main>
+
+<p class="appver wrap">VOLTAGE · versie 20 · <button type="button" id="btnRefresh">App vernieuwen</button> · <button type="button" id="btnPushTest">Test meldingen</button></p>
 
 <!-- Training loggen / bewerken -->
 <div class="sheet-bg" id="wSheet" role="dialog" aria-modal="true" aria-labelledby="wTitle">
@@ -354,6 +384,57 @@
     <div class="grid2"><label>Per week (€)<input id="bgWeek" type="text" inputmode="decimal" placeholder="bv. 120"></label><label>Per maand (€)<input id="bgMonth" type="text" inputmode="decimal" placeholder="bv. 500"></label></div>
     <div class="actions"><button class="btn-sec" type="button" data-close="bgSheet">Annuleren</button><button class="btn-save" type="submit">Opslaan</button></div>
   </form>
+</div>
+
+<!-- Daten: idee -->
+<div class="sheet-bg" id="diSheet" role="dialog" aria-modal="true" aria-labelledby="diTitle">
+  <form class="sheet" id="diForm">
+    <div class="head"><h3 id="diTitle">Nieuw idee</h3><button class="x" type="button" data-close="diSheet" aria-label="Sluiten">×</button></div>
+    <label>Wat gaan we doen?<input id="diName" maxlength="80" required placeholder="bv. Picknick in het Zwin, sushi bij Ogasawara"></label>
+    <div class="grid2"><label>Soort<select id="diCat"><option value="datenight">Date night</option><option value="uitstap">Uitstap</option><option value="restaurant">Uit eten</option><option value="thuis">Thuis</option><option value="reis">Weekend &amp; reizen</option><option value="overig">Overig</option></select></label><label>Kostprijs<select id="diCost"><option value="">—</option><option value="0">Gratis</option><option value="1">€</option><option value="2">€€</option><option value="3">€€€</option></select></label></div>
+    <label>Link of adres<input id="diLink" maxlength="300" placeholder="Website, Google Maps of reservatie"></label>
+    <label>Notitie<textarea id="diNote" rows="3" maxlength="1000" placeholder="Waarom dit leuk is, wat je moet meenemen, reservatie nodig…"></textarea></label>
+    <div class="actions"><button class="btn-del" type="button" id="diDel">Wissen</button><button class="btn-sec" type="button" data-close="diSheet">Annuleren</button><button class="btn-save" type="submit">Opslaan</button></div>
+  </form>
+</div>
+
+<!-- Daten: plannen of afronden -->
+<div class="sheet-bg" id="dmSheet" role="dialog" aria-modal="true" aria-labelledby="dmTitle">
+  <form class="sheet big" id="dmForm">
+    <div class="head"><div><h3 id="dmTitle">Date</h3><p class="sub" id="dmSub"></p></div><button class="x" type="button" data-close="dmSheet" aria-label="Sluiten">×</button></div>
+    <div class="seg" role="group" aria-label="Status"><button type="button" data-dst="planned" aria-pressed="true">Gepland</button><button type="button" data-dst="done" aria-pressed="false">Gedaan</button></div>
+    <label>Wat<input id="dmName" maxlength="80" required></label>
+    <div class="grid2"><label>Datum<input id="dmDate" type="date" required></label><label>Soort<select id="dmCat"><option value="datenight">Date night</option><option value="uitstap">Uitstap</option><option value="restaurant">Uit eten</option><option value="thuis">Thuis</option><option value="reis">Weekend &amp; reizen</option><option value="overig">Overig</option></select></label></div>
+    <div id="dmDone">
+      <label>Hoe was het?<div class="hearts" id="dmRate" role="group" aria-label="Score van 1 tot 5"><button type="button" data-r="1" aria-label="1 op 5">♥</button><button type="button" data-r="2" aria-label="2 op 5">♥</button><button type="button" data-r="3" aria-label="3 op 5">♥</button><button type="button" data-r="4" aria-label="4 op 5">♥</button><button type="button" data-r="5" aria-label="5 op 5">♥</button></div></label>
+      <label>Herinnering<textarea id="dmMem" rows="4" maxlength="2000" placeholder="Wat maakte deze dag speciaal?"></textarea></label>
+      <div class="block"><h4>Foto's</h4><div class="photos" id="dmPhotos"></div><p class="hint">Maximaal 12 foto's. Nieuwe foto's worden opgeladen als je op Opslaan tikt.</p></div>
+      <label class="chk" id="dmKeepWrap"><input type="checkbox" id="dmKeep" checked><span>Idee laten staan voor een volgende keer<small>Uitvinken als dit idee eenmalig was.</small></span></label>
+    </div>
+    <div class="actions" style="margin-top:12px"><button class="btn-del" type="button" id="dmDel">Wissen</button><button class="btn-sec" type="button" data-close="dmSheet">Annuleren</button><button class="btn-save" type="submit">Opslaan</button></div>
+  </form>
+</div>
+
+<!-- Daten: herinnering bekijken -->
+<div class="sheet-bg" id="dvSheet" role="dialog" aria-modal="true" aria-labelledby="dvTitle">
+  <div class="sheet big">
+    <div class="head"><div><h3 id="dvTitle">Herinnering</h3><p class="sub" id="dvSub"></p></div><button class="x" data-close="dvSheet" aria-label="Sluiten">×</button></div>
+    <div class="hearts ro" id="dvRate"></div>
+    <div id="dvMem"></div>
+    <div class="dvgrid" id="dvPhotos"></div>
+    <div class="actions"><button class="btn-sec" data-close="dvSheet">Sluiten</button><button class="btn-save" id="dvEdit">Bewerken</button></div>
+  </div>
+</div>
+
+<!-- Daten: verras ons -->
+<div class="sheet-bg" id="rnSheet" role="dialog" aria-modal="true" aria-labelledby="rnTitle" style="align-items:center">
+  <div class="sheet ask rn">
+    <p class="rn-k">Wat dacht je van…</p>
+    <h3 id="rnTitle"></h3>
+    <p class="sub" id="rnSub"></p>
+    <div class="actions"><button class="btn-sec" type="button" id="rnAgain">Iets anders</button><button class="btn-save" type="button" id="rnPlan">Plannen</button></div>
+    <button class="linkish" type="button" data-close="rnSheet">Sluiten</button>
+  </div>
 </div>
 
 <!-- Recept bekijken -->
