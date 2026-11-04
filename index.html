@@ -45,6 +45,7 @@
   <button role="tab" data-tab="train" aria-selected="true">Training</button>
   <button role="tab" data-tab="prog" aria-selected="false">Progress</button>
   <button role="tab" data-tab="rec" aria-selected="false">Recepten</button>
+  <button role="tab" data-tab="shop" aria-selected="false" aria-label="Boodschappen"><span class="t-lg">Boodschappen</span><span class="t-sm">Shop</span></button>
 </nav>
 
 <main class="wrap" id="tabTrain">
@@ -159,7 +160,52 @@
   <div id="recList" class="reclist"></div>
 </main>
 
-<p class="appver wrap">VOLTAGE · versie 18 · <button type="button" id="btnRefresh">App vernieuwen</button> · <button type="button" id="btnPushTest">Test meldingen</button></p>
+<main class="wrap" id="tabShop" hidden>
+  <section class="card">
+    <div class="card-head"><h2>Boodschappen</h2></div>
+    <div class="phasetabs subtabs" role="tablist" aria-label="Boodschappen">
+      <button role="tab" data-stab="list" aria-selected="true">Wekelijkse lijst</button>
+      <button role="tab" data-stab="prod" aria-selected="false">Producten</button>
+      <button role="tab" data-stab="month" aria-selected="false">Maandoverzicht</button>
+    </div>
+    <p class="status status-mirror" id="shopStatus"></p>
+  </section>
+
+  <div id="shopListV">
+    <section class="card section">
+      <div class="card-head"><div><h2 id="swLabel">Week</h2><p class="note-s" id="swSub" style="margin:2px 0 0"></p></div>
+        <div class="nav"><button class="iconbtn" data-act="wprev" aria-label="Vorige week">‹</button><button class="textbtn" data-act="wnow">Deze week</button><button class="iconbtn" data-act="wnext" aria-label="Volgende week">›</button></div></div>
+    </section>
+    <div id="shopListBody"></div>
+    <div class="shopbar" id="shopBar" hidden></div>
+  </div>
+
+  <div id="shopProdV" hidden>
+    <section class="card section">
+      <div class="card-head"><h2>Nieuw product</h2></div>
+      <form id="prodForm" class="prodform">
+        <label>Productnaam<input id="pfName" maxlength="60" required placeholder="Bijv. Broccoli, Afwasmiddel"></label>
+        <label>Vaste winkel<input id="pfStore" list="storeList" maxlength="40" placeholder="Bijv. Colruyt, Aldi"></label>
+        <label>Categorie<select id="pfCat"><option>Voeding</option><option>Drank</option><option>Huishouden</option><option>Verzorging</option><option>Huisdieren</option><option>Overig</option></select></label>
+        <div class="grid2"><label>Aantal<input id="pfQty" type="number" inputmode="numeric" min="1" max="999" value="1"></label><label>Eenheid<input id="pfUnit" maxlength="15" placeholder="bv. kg, pak, fles"></label></div>
+        <label class="chk"><input type="checkbox" id="pfFixed" checked><span>Vast product<small>Komt elke week automatisch op de boodschappenlijst.</small></span></label>
+        <button class="primary" type="submit">Toevoegen</button>
+      </form>
+    </section>
+    <section class="card section">
+      <div class="card-head"><h2>Mijn producten</h2><span class="badge" id="prodCount">0 items</span></div>
+      <input type="search" id="prodSearch" placeholder="Zoek een product, winkel of categorie…" aria-label="Zoek een product" style="margin-top:10px">
+      <div id="prodList"></div>
+    </section>
+  </div>
+
+  <div id="shopMonthV" hidden>
+    <section class="card section" id="smBody"></section>
+  </div>
+  <datalist id="storeList"></datalist>
+</main>
+
+<p class="appver wrap">VOLTAGE · versie 19 · <button type="button" id="btnRefresh">App vernieuwen</button> · <button type="button" id="btnPushTest">Test meldingen</button></p>
 
 <!-- Training loggen / bewerken -->
 <div class="sheet-bg" id="wSheet" role="dialog" aria-modal="true" aria-labelledby="wTitle">
@@ -268,6 +314,46 @@
     <div id="impPreview"></div>
     <div class="actions" style="margin-top:14px"><button class="btn-sec" data-close="impSheet">Annuleren</button><button class="btn-save" id="impGo" disabled>Importeren</button></div>
   </div>
+</div>
+
+<!-- Boodschappen: product op de lijst zetten -->
+<div class="sheet-bg" id="saSheet" role="dialog" aria-modal="true" aria-labelledby="saTitle">
+  <div class="sheet big">
+    <div class="head"><div><h3 id="saTitle">Product toevoegen</h3><p class="sub" id="saSub"></p></div><button class="x" data-close="saSheet" aria-label="Sluiten">×</button></div>
+    <input type="search" id="saSearch" placeholder="Zoek in je producten…" aria-label="Zoek in je producten">
+    <div id="saList" class="salist"></div>
+    <div class="or"><span>of een nieuw product</span></div>
+    <form id="saForm">
+      <label>Naam<input id="saName" maxlength="60" required></label>
+      <div class="grid2"><label>Winkel<input id="saStore" list="storeList" maxlength="40"></label><label>Categorie<select id="saCat"><option>Voeding</option><option>Drank</option><option>Huishouden</option><option>Verzorging</option><option>Huisdieren</option><option>Overig</option></select></label></div>
+      <div class="grid2"><label>Aantal<input id="saQty" type="number" inputmode="numeric" min="1" max="999" value="1"></label><label>Eenheid<input id="saUnit" maxlength="15" placeholder="bv. kg, pak"></label></div>
+      <label class="chk"><input type="checkbox" id="saKeep" checked><span>Ook bewaren bij mijn producten<small>Zo vind je het de volgende keer meteen terug.</small></span></label>
+      <label class="chk"><input type="checkbox" id="saFixed"><span>Vast product<small>Komt elke week automatisch op de lijst.</small></span></label>
+      <div class="actions"><button class="btn-sec" type="button" data-close="saSheet">Klaar</button><button class="btn-save" type="submit">Op de lijst</button></div>
+    </form>
+  </div>
+</div>
+
+<!-- Boodschappen: product bewerken -->
+<div class="sheet-bg" id="pdSheet" role="dialog" aria-modal="true" aria-labelledby="pdTitle">
+  <form class="sheet" id="pdForm">
+    <div class="head"><h3 id="pdTitle">Product bewerken</h3><button class="x" type="button" data-close="pdSheet" aria-label="Sluiten">×</button></div>
+    <label>Productnaam<input id="pdName" maxlength="60" required></label>
+    <div class="grid2"><label>Vaste winkel<input id="pdStore" list="storeList" maxlength="40"></label><label>Categorie<select id="pdCat"><option>Voeding</option><option>Drank</option><option>Huishouden</option><option>Verzorging</option><option>Huisdieren</option><option>Overig</option></select></label></div>
+    <div class="grid3"><label>Aantal<input id="pdQty" type="number" inputmode="numeric" min="1" max="999"></label><label>Eenheid<input id="pdUnit" maxlength="15"></label><label>Laatste prijs (€)<input id="pdPrice" type="text" inputmode="decimal"></label></div>
+    <label class="chk"><input type="checkbox" id="pdFixed"><span>Vast product<small>Komt elke week automatisch op de lijst.</small></span></label>
+    <div class="actions"><button class="btn-del" type="button" id="pdDel">Wissen</button><button class="btn-sec" type="button" data-close="pdSheet">Annuleren</button><button class="btn-save" type="submit">Opslaan</button></div>
+  </form>
+</div>
+
+<!-- Boodschappen: budget -->
+<div class="sheet-bg" id="bgSheet" role="dialog" aria-modal="true" aria-labelledby="bgTitle">
+  <form class="sheet" id="bgForm">
+    <div class="head"><h3 id="bgTitle">Budget</h3><button class="x" type="button" data-close="bgSheet" aria-label="Sluiten">×</button></div>
+    <p class="note-s">Jullie gezamenlijke budget voor boodschappen. Laat leeg als je geen budget wil volgen.</p>
+    <div class="grid2"><label>Per week (€)<input id="bgWeek" type="text" inputmode="decimal" placeholder="bv. 120"></label><label>Per maand (€)<input id="bgMonth" type="text" inputmode="decimal" placeholder="bv. 500"></label></div>
+    <div class="actions"><button class="btn-sec" type="button" data-close="bgSheet">Annuleren</button><button class="btn-save" type="submit">Opslaan</button></div>
+  </form>
 </div>
 
 <!-- Recept bekijken -->

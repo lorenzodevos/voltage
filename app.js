@@ -804,7 +804,7 @@ function renderWorkoutsLib(){const box=$("wlib");if(!box)return;
 let tab="train";try{tab=localStorage.getItem("voltage-tab")||"train"}catch(_){}
 function showTab(t){tab=t;try{localStorage.setItem("voltage-tab",t)}catch(_){}
   document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
-  $("tabTrain").hidden=t!=="train";$("tabProg").hidden=t!=="prog";$("tabRec").hidden=t!=="rec";if(t==="prog")renderProgress();if(t==="rec")renderRecipes()}
+  $("tabTrain").hidden=t!=="train";$("tabProg").hidden=t!=="prog";$("tabRec").hidden=t!=="rec";$("tabShop").hidden=t!=="shop";if(t==="prog")renderProgress();if(t==="rec")renderRecipes();if(t==="shop"){renderShop(true);refreshShop()}}
 document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>{showTab(b.dataset.tab);window.scrollTo({top:$("tabTrain").offsetTop-80,behavior:"smooth"})}));
 
 // ================= PROGRESS / DASHBOARD =================
@@ -1013,6 +1013,184 @@ $("btnPushTest").addEventListener("click",async()=>{if(!who){ask("Tik eerst bove
   const txt=`Lorenzo: ${a?"verstuurd ✓":"mislukt"} · Nele: ${b?"verstuurd ✓":"mislukt"}`;
   setStatus(txt,!(a&&b));ask(txt+(a&&b?". Krijgen jullie niets? Controleer dan het abonnement in de ntfy-app.":". Controleer je internetverbinding."),{alert:true,title:"Testmelding"})});
 
+// ================= BOODSCHAPPEN =================
+const SCATS=["Voeding","Drank","Huishouden","Verzorging","Huisdieren","Overig"];
+const SCAT_C={Voeding:"var(--lsd)",Drank:"var(--kracht)",Huishouden:"var(--run)",Verzorging:"var(--nel)",Huisdieren:"var(--kino)",Overig:"var(--rust)"};
+let S={products:[],lists:[],items:[],settings:{}};
+let stab="list",shopWeek=iso(monday(T0)),shopStore="all",hideDone=false,shopMon=new Date(T0.getFullYear(),T0.getMonth(),1),shopDirty=false,pdEdit=null;
+try{stab=localStorage.getItem("voltage-stab")||"list";hideDone=localStorage.getItem("voltage-hidedone")==="1";shopStore=localStorage.getItem("voltage-store")||"all"}catch(_){}
+const eur=v=>(Math.round((Number(v)||0)*100)/100).toLocaleString("nl-BE",{style:"currency",currency:"EUR"});
+const pnum=v=>{v=String(v==null?"":v).replace(/[€\s]/g,"");if(!v)return null;const n=num(v);return n==null||n<0?NaN:Math.round(n*100)/100};
+const sname=s=>s||"Zonder winkel";
+const ptxt=v=>v==null?"":String(v).replace(".",",");
+function shopStores(){const set=new Set();S.products.forEach(p=>set.add(p.store||""));S.items.forEach(i=>set.add(i.store||""));return[...set].sort((a,b)=>!a?1:!b?-1:a.localeCompare(b))}
+function listOf(w){return S.lists.find(l=>l.week===w)}
+function prodOf(id){return id?S.products.find(p=>p.id===id):null}
+function eff(i){if(i.price!=null)return i.price;const p=prodOf(i.productId);return p&&p.lastPrice!=null?p.lastPrice:null}
+// ---- live wijzigingen: meteen zichtbaar, op de achtergrond doorgestuurd (ook bij slecht bereik) ----
+const pend={};let shopOffline=false;
+function savePend(){try{const o={};Object.keys(pend).forEach(k=>o[k]=pend[k].patch);localStorage.setItem("voltage-shop-pend",JSON.stringify(o))}catch(_){}}
+function curItem(id){const i=S.items.find(x=>x.id===id);return i?(pend[id]?Object.assign({},i,pend[id].patch):i):null}
+function itemsOf(lid){return S.items.filter(i=>i.listId===lid).map(i=>pend[i.id]?Object.assign({},i,pend[i.id].patch):i)}
+function queueItem(id,patch){const p=pend[id]||(pend[id]={patch:{},seq:0,timer:null,inflight:0});Object.assign(p.patch,patch);p.seq++;savePend();
+  clearTimeout(p.timer);p.timer=setTimeout(()=>flushItem(id),400);renderShop()}
+async function flushItem(id){const p=pend[id];if(!p)return;if(!pin){p.timer=setTimeout(()=>flushItem(id),3000);return}
+  const seq=p.seq,patch=Object.assign({},p.patch);p.inflight++;
+  try{const res=await call("updateListItem",id,patch,who||"");p.inflight--;if(pend[id]===p&&p.seq===seq&&!p.inflight){delete pend[id];savePend()}apply(res);if(shopOffline&&!Object.keys(pend).length){shopOffline=false;setStatus("Weer verbonden: alles is bijgewerkt.")}}
+  catch(e){p.inflight--;const m=String(e&&e.message||e);
+    if(m.includes("NO_ITEM")){delete pend[id];savePend();refreshShop();return}
+    shopOffline=true;setStatus("Geen verbinding: je wijzigingen staan klaar en worden verstuurd zodra je weer bereik hebt.",true);clearTimeout(p.timer);p.timer=setTimeout(()=>flushItem(id),4000)}}
+try{const saved=JSON.parse(localStorage.getItem("voltage-shop-pend")||"{}");Object.keys(saved).forEach(id=>{pend[id]={patch:saved[id],seq:1,timer:setTimeout(()=>flushItem(id),2500),inflight:0}})}catch(_){}
+if(Object.keys(pend).length)shopOffline=true;
+async function shopRun(fn,args,msg){setStatus("Bezig…");try{const r=await call(fn,...args);apply(r);setStatus(msg);return r}catch(e){setStatus(errText(e),true);refreshShop();return null}}
+let shopPolling=false;
+async function refreshShop(){if(!pin||shopPolling)return;shopPolling=true;try{apply(await call("getShop"))}catch(_){}finally{shopPolling=false}}
+// ---- weergave ----
+function shopTyping(){const a=document.activeElement;return !!(a&&$("tabShop").contains(a)&&/^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)&&a.type!=="checkbox")}
+$("tabShop").addEventListener("focusout",()=>setTimeout(()=>{if(shopDirty&&!shopTyping()){shopDirty=false;renderShop()}},60));
+function setStab(t){stab=t;try{localStorage.setItem("voltage-stab",t)}catch(_){}renderShop(true)}
+function renderShop(force){if(!$("tabShop")||$("tabShop").hidden)return;
+  if(!force&&shopTyping()){shopDirty=true;renderShopBar();return}
+  document.querySelectorAll("[data-stab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.stab===stab)));
+  $("storeList").innerHTML=shopStores().filter(Boolean).map(s=>`<option value="${esc(s)}">`).join("");
+  $("shopListV").hidden=stab!=="list";$("shopProdV").hidden=stab!=="prod";$("shopMonthV").hidden=stab!=="month";
+  if(stab==="list")renderShopList();else if(stab==="prod")renderProducts();else renderShopMonth();
+  renderShopBar()}
+function sortItems(a,b){return sname(a.store).localeCompare(sname(b.store))||SCATS.indexOf(a.category)-SCATS.indexOf(b.category)||a.name.localeCompare(b.name)}
+function itemRow(i){const p=eff(i),est=i.price==null&&p!=null,lt=p!=null?p*i.qty:null;
+  return `<div class="si ${i.checked?"done":""}">
+  <button type="button" class="sichk" data-chk="${esc(i.id)}" aria-pressed="${i.checked}" aria-label="${esc(i.name)} ${i.checked?"uit de kar halen":"in de kar"}"></button>
+  <div class="si-n"><b>${esc(i.name)}</b>${i.unit?`<span>${esc(i.unit)}</span>`:""}</div>
+  <div class="si-q"><button type="button" data-dq="${esc(i.id)}" data-d="-1" aria-label="Minder ${esc(i.name)}" ${i.qty<=1?"disabled":""}>−</button><span>${i.qty}</span><button type="button" data-dq="${esc(i.id)}" data-d="1" aria-label="Meer ${esc(i.name)}">+</button></div>
+  <div class="si-p"><label><span>€ / stuk</span><input type="text" inputmode="decimal" data-price="${esc(i.id)}" value="${ptxt(i.price)}" placeholder="${est?ptxt(p):"prijs"}" aria-label="Prijs per stuk ${esc(i.name)}"></label><span class="lt ${est?"est":""}">${lt!=null?(est?"≈ ":"")+eur(lt):""}</span><button type="button" class="sx" data-rmi="${esc(i.id)}" aria-label="${esc(i.name)} van de lijst halen">×</button></div>
+</div>`}
+function renderShopList(){const mon=pd(shopWeek),cur=shopWeek===iso(monday(T0)),lst=listOf(shopWeek);
+  $("swLabel").textContent=`Week van ${fd(mon)}`;$("swSub").textContent=`${fd(mon)} – ${fd(addDays(mon,6))} ${addDays(mon,6).getFullYear()}${cur?" · deze week":""}`;
+  const box=$("shopListBody");
+  if(!lst){const fx=S.products.filter(p=>p.fixed);const ns=new Set(fx.map(p=>p.store)).size;
+    box.innerHTML=`<section class="card gencard">${fx.length?`<p class="note-s">${fx.length} vaste product${fx.length>1?"en":""} in ${ns} winkel${ns!==1?"s":""} staan klaar.</p><button class="primary genbtn" data-act="gen">Genereer boodschappenlijst</button>`
+      :`<p class="dayempty">Je hebt nog geen vaste producten. Voeg eerst je producten toe, dan maakt de app elke week in één tik je lijst.</p><button class="primary genbtn" data-stab-go="prod">Producten toevoegen</button>`}<button class="linkish" data-act="empty">Of start een lege lijst</button></section>`;return}
+  const all=itemsOf(lst.id).sort(sortItems);const st=[...new Set(all.map(i=>i.store))];
+  if(shopStore!=="all"&&!st.includes(shopStore))shopStore="all";
+  const vis=all.filter(i=>(shopStore==="all"||i.store===shopStore)&&(!hideDone||!i.checked));
+  const fxMissing=S.products.filter(p=>p.fixed&&!all.some(i=>i.productId===p.id)).length;
+  let h=`<div class="phasechips shopchips">${[["all","Alle winkels",all]].concat(st.map(s=>[s,sname(s),all.filter(i=>i.store===s)])).map(([k,l,arr])=>`<button type="button" data-store="${esc(k)}" aria-pressed="${shopStore===k}">${esc(l)} <span>${arr.filter(i=>!i.checked).length}</span></button>`).join("")}</div>
+  <label class="chk hidedone"><input type="checkbox" data-act="hide" ${hideDone?"checked":""}><span>Verberg wat al in de kar zit</span></label>`;
+  if(!all.length)h+=`<section class="card"><p class="dayempty">De lijst is nog leeg. Voeg hieronder producten toe.</p></section>`;
+  else if(!vis.length)h+=`<section class="card"><p class="dayempty">Alles zit in de kar. Goed gedaan.</p></section>`;
+  st.forEach(s=>{const sv=vis.filter(i=>i.store===s);if(!sv.length)return;const sa=all.filter(i=>i.store===s);const done=sa.filter(i=>i.checked);
+    const sub=done.reduce((a,i)=>a+(eff(i)||0)*i.qty,0);
+    h+=`<section class="card shopstore"><div class="ss-head"><h3>${esc(sname(s))}</h3><span>${done.length}/${sa.length} in de kar${sub?" · "+eur(sub):""}</span></div>`;
+    SCATS.forEach(c=>{const ci=sv.filter(i=>i.category===c);if(!ci.length)return;h+=`<div class="ss-cat"><i style="background:${SCAT_C[c]}"></i>${c}</div>`+ci.map(itemRow).join("")});
+    h+=`</section>`});
+  h+=`<div class="shopactions"><button class="primary" data-act="add">+ Product toevoegen</button>${fxMissing?`<button class="textbtn" data-act="fill">Vaste producten aanvullen (${fxMissing})</button>`:""}<button class="rm" data-act="dellist">Lijst wissen</button></div>`;
+  box.innerHTML=h}
+function shopTotals(lid){let inCart=0,est=0,done=0,n=0;itemsOf(lid).forEach(i=>{n++;const p=eff(i);if(p!=null)est+=p*i.qty;if(i.checked){done++;if(p!=null)inCart+=p*i.qty}});return{inCart,est,done,n}}
+function renderShopBar(){const bar=$("shopBar");const lst=listOf(shopWeek);if(stab!=="list"||!lst){bar.hidden=true;return}
+  const t=shopTotals(lst.id),B=S.settings.weekBudget,over=B&&t.inCart>B;bar.hidden=false;
+  bar.innerHTML=`<div class="sb-row"><div><span>In de kar</span><b>${eur(t.inCart)}</b></div><div><span>Geschat totaal</span><b>${eur(t.est)}</b></div><button type="button" class="sb-budget" data-act="budget"><span>Weekbudget</span><b>${B?eur(B):"Instellen"}</b></button></div>
+  ${B?`<div class="bar sb-bar ${over?"over":""}"><i style="width:${Math.min(100,t.inCart/B*100)}%"></i></div>`:""}<div class="sb-note">${t.done}/${t.n} in de kar${B?` · ${over?eur(t.inCart-B)+" over budget":"nog "+eur(B-t.inCart)+" over"}`:""}</div>`}
+function renderProducts(){const q=($("prodSearch").value||"").trim().toLowerCase();
+  const list=S.products.filter(p=>!q||(p.name+" "+p.store+" "+p.category).toLowerCase().includes(q));
+  $("prodCount").textContent=`${S.products.length} item${S.products.length!==1?"s":""}`;
+  if(!list.length){$("prodList").innerHTML=`<p class="dayempty">${S.products.length?"Geen producten gevonden.":"Nog geen producten toegevoegd. Gebruik het formulier om je database op te bouwen."}</p>`;return}
+  const lst=listOf(shopWeek),on=new Set(lst?itemsOf(lst.id).map(i=>i.productId):[]);
+  const st=[...new Set(list.map(p=>p.store))].sort((a,b)=>!a?1:!b?-1:a.localeCompare(b));
+  $("prodList").innerHTML=st.map(s=>{const ps=list.filter(p=>p.store===s).sort((a,b)=>SCATS.indexOf(a.category)-SCATS.indexOf(b.category)||a.name.localeCompare(b.name));
+    return `<div class="pr-store"><h3>${esc(sname(s))}</h3><span>${ps.length}</span></div>`+ps.map(p=>`<div class="pr">
+      <button type="button" class="pr-main" data-editprod="${esc(p.id)}"><b>${esc(p.name)}</b><span><i style="background:${SCAT_C[p.category]}"></i>${p.category} · ${p.qty}${p.unit?" "+esc(p.unit):"×"}${p.lastPrice!=null?" · "+eur(p.lastPrice):""}</span></button>
+      <button type="button" class="fixbtn" data-fix="${esc(p.id)}" aria-pressed="${p.fixed}" title="Vast product: komt elke week op de lijst">Vast</button>
+      <button type="button" class="iconbtn addprod ${on.has(p.id)?"on":""}" data-addprod="${esc(p.id)}" aria-label="${esc(p.name)} op de lijst van de week van ${fd(pd(shopWeek))}" ${on.has(p.id)?"disabled":""}>${on.has(p.id)?"✓":"+"}</button></div>`).join("")}).join("")}
+function boughtItems(){return S.items.filter(i=>i.checked).map(i=>{const l=S.lists.find(x=>x.id===i.listId);return Object.assign({},i,{d:i.boughtAt||(l?l.week:""),amt:i.price!=null?i.price*i.qty:null})})}
+function hbars(rows,colorFn){const max=Math.max(...rows.map(r=>r[1]),0);return rows.length?rows.map(([l,v,c])=>`<div class="hb"><span class="hb-l">${esc(l)}</span><div class="hb-t"><i style="width:${max?v/max*100:0}%;background:${c||"var(--volt)"}"></i></div><b>${eur(v)}</b></div>`).join(""):`<p class="dayempty">Nog niets gekocht deze maand.</p>`}
+function renderShopMonth(){const y=shopMon.getFullYear(),m=shopMon.getMonth(),key=`${y}-${String(m+1).padStart(2,"0")}`;
+  const all=boughtItems(),b=all.filter(i=>i.d.startsWith(key)),tot=b.reduce((a,i)=>a+(i.amt||0),0),np=b.filter(i=>i.amt==null).length;
+  const pm=new Date(y,m-1,1),pk=`${pm.getFullYear()}-${String(pm.getMonth()+1).padStart(2,"0")}`,ptot=all.filter(i=>i.d.startsWith(pk)).reduce((a,i)=>a+(i.amt||0),0);
+  const MB=S.settings.monthBudget,over=MB&&tot>MB;
+  const sum=(arr,f)=>{const o={};arr.forEach(i=>{const k=f(i);o[k]=(o[k]||0)+(i.amt||0)});return o};
+  const wk=sum(b,i=>iso(monday(pd(i.d)))),stO=sum(b,i=>sname(i.store)),caO=sum(b,i=>i.category);
+  const WB=S.settings.weekBudget;
+  const weeks=Object.keys(wk).sort().map(k=>[`Week van ${fd(pd(k))}`,wk[k],WB&&wk[k]>WB?"var(--run)":"var(--volt)"]);
+  const six=[];for(let k=5;k>=0;k--){const d=new Date(y,m-k,1),kk=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;six.push([MN[d.getMonth()],all.filter(i=>i.d.startsWith(kk)).reduce((a,i)=>a+(i.amt||0),0),k===0])}
+  const smax=Math.max(...six.map(x=>x[1]),MB||0,1)*1.12;
+  const dl=ptot?tot-ptot:null;
+  $("smBody").innerHTML=`<div class="card-head"><h2>${MNF[m]} ${y}</h2><div class="nav"><button class="iconbtn" data-act="mprev" aria-label="Vorige maand">‹</button><button class="iconbtn" data-act="mnext" aria-label="Volgende maand">›</button></div></div>
+  <div class="smtot"><div><span>Uitgegeven</span><b>${eur(tot)}</b>${dl!=null?`<em class="${dl>0?"up":"down"}">${dl>0?"+":"−"}${eur(Math.abs(dl))} t.o.v. ${MNF[pm.getMonth()]}</em>`:""}</div>
+    <button type="button" class="sb-budget" data-act="budget"><span>Maandbudget</span><b>${MB?eur(MB):"Instellen"}</b></button></div>
+  ${MB?`<div class="bar sb-bar ${over?"over":""}"><i style="width:${Math.min(100,tot/MB*100)}%"></i></div><p class="sb-note">${over?eur(tot-MB)+" over budget":"Nog "+eur(MB-tot)+" over deze maand"}</p>`:""}
+  ${np?`<p class="note-s">${np} gekocht${np>1?"e producten":" product"} zonder prijs, ${np>1?"die tellen":"dat telt"} niet mee.</p>`:""}
+  <div class="sub-h">Per week</div>${hbars(weeks)}
+  <div class="sub-h">Per winkel</div>${hbars(Object.entries(stO).sort((a,b)=>b[1]-a[1]))}
+  <div class="sub-h">Per categorie</div>${hbars(Object.entries(caO).sort((a,b)=>b[1]-a[1]).map(([k,v])=>[k,v,SCAT_C[k]]))}
+  <div class="sub-h">Laatste 6 maanden</div>
+  <div class="cols">${six.map(([l,v,cur])=>`<div class="col ${cur?"cur":""}"><b>${v?eur(v).replace(/,00/,""):""}</b><div class="col-t"><i style="height:${v/smax*100}%;background:${MB&&v>MB?"var(--run)":"var(--volt)"}"></i>${MB?`<u style="bottom:${MB/smax*100}%"></u>`:""}</div><span>${l}</span></div>`).join("")}</div>
+  ${MB?`<p class="note-s" style="margin-top:6px">De stippellijn is jullie maandbudget.</p>`:""}`}
+// ---- acties ----
+async function genList(empty){if(!pin)return;
+  const items=empty?[]:S.products.filter(p=>p.fixed).map(p=>({productId:p.id,name:p.name,store:p.store,category:p.category,qty:p.qty,unit:p.unit}));
+  const r=await shopRun("createList",[shopWeek,who||"",items],empty?"Lege lijst gestart.":`Boodschappenlijst klaar: ${items.length} producten.`);
+  if(r&&r.isNew&&who&&items.length)push(other(),`${NAMES[who]} maakte de boodschappenlijst`,`${items.length} producten · week van ${fd(pd(shopWeek))}`);
+  return r}
+async function ensureList(){const l=listOf(shopWeek);if(l)return l.id;const r=await genList(true);return r?r.savedId:null}
+async function addProdToList(p){const lid=await ensureList();if(!lid)return;
+  await shopRun("addListItems",[lid,[{productId:p.id,name:p.name,store:p.store,category:p.category,qty:p.qty,unit:p.unit}]],`${p.name} staat op de lijst van de week van ${fd(pd(shopWeek))}.`)}
+$("tabShop").addEventListener("click",async e=>{const b=e.target.closest("button,input[data-act]");if(!b||!$("tabShop").contains(b))return;const d=b.dataset;
+  if(d.stab){setStab(d.stab);return}
+  if(d.stabGo){setStab(d.stabGo);return}
+  if(d.store!==undefined){shopStore=d.store;try{localStorage.setItem("voltage-store",shopStore)}catch(_){}renderShop(true);return}
+  if(d.chk){const it=curItem(d.chk);if(!it)return;const patch={checked:!it.checked,boughtAt:TODAY};
+    if(!it.checked&&it.price==null){const p=eff(it);if(p!=null)patch.price=p}
+    if(!it.checked&&navigator.vibrate)navigator.vibrate(10);queueItem(it.id,patch);return}
+  if(d.dq){const it=curItem(d.dq);if(!it)return;queueItem(it.id,{qty:Math.max(1,Math.min(999,(it.qty||1)+Number(d.d)))});return}
+  if(d.rmi){const it=curItem(d.rmi);if(!it||!(await ask(`${it.name} van de lijst halen?`,{title:"Verwijderen?",ok:"Ja, verwijder",danger:true})))return;
+    clearTimeout(pend[it.id]&&pend[it.id].timer);delete pend[it.id];savePend();S.items=S.items.filter(x=>x.id!==it.id);renderShop(true);await shopRun("deleteListItem",[it.id],`${it.name} van de lijst gehaald.`);return}
+  if(d.editprod){openProd(d.editprod);return}
+  if(d.fix){const p=prodOf(d.fix);if(!p)return;p.fixed=!p.fixed;renderShop(true);await shopRun("saveProduct",[p],p.fixed?`${p.name} is nu een vast product.`:`${p.name} is geen vast product meer.`);return}
+  if(d.addprod){const p=prodOf(d.addprod);if(p)await addProdToList(p);return}
+  const a=d.act;if(!a)return;
+  if(a==="hide"){hideDone=b.checked;try{localStorage.setItem("voltage-hidedone",hideDone?"1":"0")}catch(_){}renderShop(true);return}
+  if(a==="wprev"||a==="wnext"||a==="wnow"){shopWeek=a==="wnow"?iso(monday(T0)):iso(addDays(pd(shopWeek),a==="wprev"?-7:7));renderShop(true);return}
+  if(a==="mprev"||a==="mnext"){shopMon=new Date(shopMon.getFullYear(),shopMon.getMonth()+(a==="mprev"?-1:1),1);renderShop(true);return}
+  if(a==="gen"){await genList(false);return}
+  if(a==="empty"){await genList(true);return}
+  if(a==="fill"){await genList(false);return}
+  if(a==="add"){openAdd();return}
+  if(a==="budget"){$("bgWeek").value=ptxt(S.settings.weekBudget);$("bgMonth").value=ptxt(S.settings.monthBudget);openSheet("bgSheet");return}
+  if(a==="dellist"){const l=listOf(shopWeek);if(!l)return;const n=itemsOf(l.id).filter(i=>i.checked).length;
+    if(!(await ask(`De boodschappenlijst van de week van ${fd(pd(shopWeek))} wissen?${n?` ${n} afgevinkte product${n>1?"en tellen":" telt"} dan niet meer mee in het maandoverzicht.`:""}`,{title:"Lijst wissen?",ok:"Ja, wissen",danger:true})))return;
+    await shopRun("deleteList",[l.id],"Lijst gewist.")}});
+$("tabShop").addEventListener("change",e=>{const t=e.target;if(!t.dataset.price)return;const n=pnum(t.value);
+  if(Number.isNaN(n)){t.value="";setStatus("Vul een prijs in zoals 2,49.",true);return}const it=curItem(t.dataset.price);if(!it||it.price===n)return;
+  queueItem(t.dataset.price,{price:n})});
+$("tabShop").addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.dataset&&e.target.dataset.price){e.preventDefault();e.target.blur()}});
+$("prodSearch").addEventListener("input",()=>renderProducts());
+$("prodForm").addEventListener("submit",async e=>{e.preventDefault();const p={name:$("pfName").value.trim(),store:$("pfStore").value.trim(),category:$("pfCat").value,qty:num($("pfQty").value)||1,unit:$("pfUnit").value.trim(),fixed:$("pfFixed").checked};
+  if(!p.name)return;const dup=S.products.find(x=>x.name.toLowerCase()===p.name.toLowerCase()&&(x.store||"").toLowerCase()===p.store.toLowerCase());
+  if(dup&&!(await ask(`${dup.name} bij ${sname(dup.store)} staat al in je producten. Toch nog eens toevoegen?`,{title:"Bestaat al",ok:"Ja, toevoegen"})))return;
+  const r=await shopRun("saveProduct",[p],`${p.name} toegevoegd.`);if(r){$("pfName").value="";$("pfQty").value="1";$("pfUnit").value="";$("pfName").focus()}});
+function openProd(id){const p=prodOf(id);if(!p)return;pdEdit=id;$("pdName").value=p.name;$("pdStore").value=p.store;$("pdCat").value=p.category;$("pdQty").value=p.qty;$("pdUnit").value=p.unit;$("pdPrice").value=ptxt(p.lastPrice);$("pdFixed").checked=p.fixed;openSheet("pdSheet")}
+$("pdForm").addEventListener("submit",async e=>{e.preventDefault();const price=pnum($("pdPrice").value);if(Number.isNaN(price)){ask("Vul een prijs in zoals 2,49, of laat het leeg.",{alert:true});return}
+  const p={id:pdEdit,name:$("pdName").value.trim(),store:$("pdStore").value.trim(),category:$("pdCat").value,qty:num($("pdQty").value)||1,unit:$("pdUnit").value.trim(),fixed:$("pdFixed").checked,lastPrice:price};
+  if(!p.name)return;closeSheet("pdSheet");await shopRun("saveProduct",[p],`${p.name} opgeslagen.`)});
+$("pdDel").addEventListener("click",async()=>{const p=prodOf(pdEdit);if(!p||!(await ask(`${p.name} uit je producten verwijderen? Op bestaande lijsten blijft het staan.`,{title:"Verwijderen?",ok:"Ja, verwijder",danger:true})))return;closeSheet("pdSheet");await shopRun("deleteProduct",[p.id],`${p.name} verwijderd.`)});
+$("bgForm").addEventListener("submit",async e=>{e.preventDefault();const w=pnum($("bgWeek").value),m=pnum($("bgMonth").value);if(Number.isNaN(w)||Number.isNaN(m)){ask("Vul een bedrag in zoals 120, of laat het leeg.",{alert:true});return}
+  closeSheet("bgSheet");if(await shopRun("saveSetting",["weekBudget",w],"Bezig…"))await shopRun("saveSetting",["monthBudget",m],"Budget opgeslagen.")});
+// ---- product op de lijst zetten ----
+function openAdd(){$("saSearch").value="";$("saName").value="";$("saQty").value="1";$("saUnit").value="";$("saKeep").checked=true;$("saFixed").checked=false;
+  $("saStore").value=shopStore!=="all"?shopStore:"";$("saSub").textContent=`Week van ${fd(pd(shopWeek))}`;renderAdd();openSheet("saSheet");setTimeout(()=>$("saSearch").focus(),60)}
+function renderAdd(){const l=listOf(shopWeek),on=new Set(l?itemsOf(l.id).map(i=>i.productId):[]),q=$("saSearch").value.trim().toLowerCase();
+  const ps=S.products.filter(p=>!on.has(p.id)&&(!q||(p.name+" "+p.store+" "+p.category).toLowerCase().includes(q))).sort((a,b)=>sname(a.store).localeCompare(sname(b.store))||a.name.localeCompare(b.name));
+  $("saList").innerHTML=ps.length?ps.slice(0,60).map(p=>`<button type="button" class="sa-row" data-sa="${esc(p.id)}"><span><b>${esc(p.name)}</b><small>${esc(sname(p.store))} · ${p.category}</small></span><i>+</i></button>`).join("")
+    :`<p class="dayempty">${q?`Geen product “${esc(q)}” gevonden. Vul het hieronder in.`:S.products.length?"Al je producten staan al op de lijst.":"Nog geen producten. Vul hieronder een nieuw product in."}</p>`}
+$("saSearch").addEventListener("input",()=>{renderAdd();const q=$("saSearch").value.trim();if(q&&!S.products.some(p=>p.name.toLowerCase().includes(q.toLowerCase())))$("saName").value=q});
+$("saList").addEventListener("click",async e=>{const b=e.target.closest("[data-sa]");if(!b)return;const p=prodOf(b.dataset.sa);if(!p)return;b.disabled=true;await addProdToList(p);renderAdd()});
+$("saForm").addEventListener("submit",async e=>{e.preventDefault();const it={name:$("saName").value.trim(),store:$("saStore").value.trim(),category:$("saCat").value,qty:num($("saQty").value)||1,unit:$("saUnit").value.trim()};
+  if(!it.name)return;
+  if($("saKeep").checked){const r=await shopRun("saveProduct",[Object.assign({fixed:$("saFixed").checked},it)],"Bezig…");if(!r)return;it.productId=r.savedId}
+  const lid=await ensureList();if(!lid)return;
+  await shopRun("addListItems",[lid,[it]],`${it.name} staat op de lijst.`);$("saName").value="";$("saQty").value="1";$("saUnit").value="";renderAdd();$("saName").focus()});
+setInterval(()=>{if(document.visibilityState==="visible"&&tab==="shop"&&stab==="list"&&!document.querySelector(".sheet-bg.open")&&!Object.keys(pend).length)refreshShop()},12000);
+
 // ================= EIGEN BEVESTIGINGSVENSTER =================
 function ask(text,o={}){return new Promise(res=>{
   const bg=$("askBg");$("askTitle").textContent=o.title||(o.alert?"Let op":"Ben je zeker?");$("askText").textContent=text;
@@ -1027,24 +1205,24 @@ function ask(text,o={}){return new Promise(res=>{
 function openSheet(id){$(id).classList.add("open")}
 function closeSheet(id){$(id).classList.remove("open");if(id==="vSheet")viewId=null}
 document.querySelectorAll("[data-close]").forEach(b=>b.addEventListener("click",()=>b.dataset.close==="wSheet"?requestCloseEditor():closeSheet(b.dataset.close)));
-["wSheet","vSheet","gSheet","plSheet","impSheet","xSheet","pfSheet","rvSheet","reSheet","rpSheet","psSheet"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))id==="wSheet"?requestCloseEditor():closeSheet(id)}));
+["wSheet","vSheet","gSheet","plSheet","impSheet","xSheet","pfSheet","rvSheet","reSheet","rpSheet","psSheet","saSheet","pdSheet","bgSheet"].forEach(id=>$(id).addEventListener("click",e=>{if(e.target===$(id))id==="wSheet"?requestCloseEditor():closeSheet(id)}));
 $("pSheet").addEventListener("click",e=>{if(e.target===$("pSheet"))closePicker()});
 document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;
   if($("lightbox").classList.contains("open")){$("lightbox").classList.remove("open");return}
   if($("pSheet").classList.contains("open")){closePicker();return}
-  for(const id of ["psSheet","xSheet","rpSheet","reSheet","rvSheet","pfSheet","impSheet","gSheet","plSheet","wSheet","vSheet"])if($(id).classList.contains("open")){id==="wSheet"?requestCloseEditor():closeSheet(id);return}});
+  for(const id of ["psSheet","bgSheet","pdSheet","saSheet","xSheet","rpSheet","reSheet","rvSheet","pfSheet","impSheet","gSheet","plSheet","wSheet","vSheet"])if($(id).classList.contains("open")){id==="wSheet"?requestCloseEditor():closeSheet(id);return}});
 
 // ================= SERVER =================
 let stTimer=null,busy=0;
-function setStatus(msg,warn){const el=$("status");el.textContent=msg;const b=/…$/.test(msg);el.className="status"+(warn?" warn":b?" busy":"");clearTimeout(stTimer);if(!warn&&!b)stTimer=setTimeout(idleStatus,4000)}
+function setStatus(msg,warn){const el=$("status");el.textContent=msg;const b=/…$/.test(msg);el.className="status"+(warn?" warn":b?" busy":"");document.querySelectorAll(".status-mirror").forEach(x=>{x.textContent=msg;x.className="status status-mirror"+(warn?" warn":b?" busy":"")});clearTimeout(stTimer);if(!warn&&!b)stTimer=setTimeout(idleStatus,4000)}
 function idleStatus(){if(!pin)return;setStatus(who?"Gedeeld: de ander ziet je trainingen en reacties binnen een halve minuut.":"Tik bovenaan op je naam om te beginnen.")}
-function errText(e){const m=String(e&&e.message||e);if(m==="NETWORK")return"Geen verbinding met de server. Controleer je internet.";if(m==="BAD_RESPONSE"||m==="UNKNOWN_FN")return"De server heeft nog de oude versie: publiceer in Apps Script een nieuwe versie.";if(m.indexOf("MAX_PHOTOS")>=0)return"Maximaal 4 foto's per training.";if(m.indexOf("TOO_BIG")>=0)return"Te veel gegevens voor één training.";return"Er ging iets mis ("+m+"). Probeer opnieuw."}
+function errText(e){const m=String(e&&e.message||e);if(m.includes("NO_LIST")||m.includes("NO_ITEM"))return"Dit staat niet meer op de lijst. De lijst is vernieuwd.";if(m==="NETWORK")return"Geen verbinding met de server. Controleer je internet.";if(m==="BAD_RESPONSE"||m==="UNKNOWN_FN")return"De server heeft nog de oude versie: publiceer in Apps Script een nieuwe versie.";if(m.indexOf("MAX_PHOTOS")>=0)return"Maximaal 4 foto's per training.";if(m.indexOf("TOO_BIG")>=0)return"Te veel gegevens voor één training.";return"Er ging iets mis ("+m+"). Probeer opnieuw."}
 async function call(fn,...args){let r;
   try{r=await fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({fn,args:[pin,...args]}),redirect:"follow"})}catch(e){throw new Error("NETWORK")}
   if(!r.ok)throw new Error("HTTP_"+r.status);let j;try{j=await r.json()}catch(e){throw new Error("BAD_RESPONSE")}
   if(!j.ok)throw new Error(j.error||"ERROR");return j.data}
 async function run(fn,args,okMsg){busy++;setStatus("Bezig…");try{const res=await call(fn,...args);busy--;apply(res);setStatus(okMsg)}catch(e){busy--;setStatus(errText(e),true);refresh()}}
-function apply(d){if(!d)return;W=d.workouts||[];C=d.comments||[];G=d.goals||[];P=d.plan||[];TP=d.templates||[];PR=d.profiles||[];B=d.body||[];RC=d.recipes||[];if(d.ntfy)NT=d.ntfy;byId={};W.forEach(w=>byId[w.id]=w);render();
+function apply(d){if(!d)return;if(d.shop){S=d.shop;S.settings=S.settings||{}}if(d.partial){renderShop();return}W=d.workouts||[];C=d.comments||[];G=d.goals||[];P=d.plan||[];TP=d.templates||[];PR=d.profiles||[];B=d.body||[];RC=d.recipes||[];if(d.ntfy)NT=d.ntfy;byId={};W.forEach(w=>byId[w.id]=w);render();
   if(viewId&&$("vSheet").classList.contains("open")){const box=$("vThread");if(!box.contains(document.activeElement))renderThread(box,viewId)}}
 function isPinErr(e){return String(e&&e.message||e).indexOf("PIN_WRONG")>=0}
 async function refresh(){if(!pin||busy)return;
@@ -1056,7 +1234,7 @@ $("pinForm").addEventListener("submit",async e=>{e.preventDefault();const v=$("p
   catch(err){pin=old;$("pinErr").textContent=isPinErr(err)?"Die pincode klopt niet.":errText(err)}});
 
 // ================= RENDER =================
-function render(){renderHero();renderCal();renderWeek();renderGoals();renderWorkoutsLib();renderFeed();renderProgress();renderRecipes()}
+function render(){renderHero();renderCal();renderWeek();renderGoals();renderWorkoutsLib();renderFeed();renderProgress();renderRecipes();renderShop()}
 renderWho();showTab(tab);render();
 if(!pin)askPin(false);else refresh();
 setInterval(()=>{if(document.visibilityState==="visible"&&!document.querySelector(".sheet-bg.open"))refresh()},30000);
