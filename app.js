@@ -1220,7 +1220,7 @@ function renderHub(){if($("hub").hidden)return;
   if(l){const it=S.items.filter(i=>i.listId===l.id),open=it.filter(i=>!i.checked).length;$("hubShopBig").textContent=open?open+" te halen":"Alles in huis";$("hubShop").textContent=`Lijst van deze week · ${it.length-open}/${it.length} in de kar`}
   else{$("hubShopBig").textContent="Nieuwe week";$("hubShop").textContent=S.products.some(p=>p.fixed)?"Tik om je lijst te genereren":"Boodschappen en budget"}
   const up=DT.filter(d=>d.type==="moment"&&d.status==="planned"&&d.date>=TODAY).sort((a,b)=>a.date.localeCompare(b.date))[0];
-  const ideas=DT.filter(d=>d.type==="idea").length;
+  const ideas=openIdeas().length;
   if(up){const n=Math.round((pd(up.date)-T0)/864e5);$("hubDateBig").textContent=n===0?"Vandaag":n===1?"Morgen":"Over "+n+" dagen";$("hubDate").textContent=up.title}
   else{$("hubDateBig").textContent=ideas?ideas+" idee"+(ideas>1?"ën":""):"Plan iets";$("hubDate").textContent=ideas?"Klaar om te kiezen":"Ideeën, plannen en herinneringen"}
   const wOpen=WS.filter(w=>w.status!=="received");
@@ -1238,11 +1238,13 @@ const COSTL=["Gratis","€","€€","€€€"];
 let DT=[],dtab="ideas",dcat="all",diEdit=null,dm=null,rnPick=null;
 try{dtab=localStorage.getItem("voltage-dtab")||"ideas"}catch(_){}
 const dById=id=>DT.find(d=>d.id===id);
+// Een idee dat ingepland is, verhuist naar Gepland en staat niet meer bij Ideeën
+function openIdeas(){const busy=new Set(DT.filter(m=>m.type==="moment"&&m.status==="planned"&&m.ideaId).map(m=>m.ideaId));return DT.filter(d=>d.type==="idea"&&!busy.has(d.id))}
 function relDay(ds){const n=Math.round((pd(ds)-T0)/864e5);return n===0?"vandaag":n===1?"morgen":n===-1?"gisteren":n>1?`over ${n} dagen`:`${-n} dagen geleden`}
 function hearts(n){return n?"♥".repeat(n)+`<span class="off">${"♥".repeat(5-n)}</span>`:""}
 function renderDates(){if($("tabDate").hidden)return;
   document.querySelectorAll("[data-dtab]").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.dtab===dtab)));
-  const ideas=DT.filter(d=>d.type==="idea"),plan=DT.filter(d=>d.type==="moment"&&d.status==="planned").sort((a,b)=>a.date.localeCompare(b.date)),
+  const ideas=openIdeas(),plan=DT.filter(d=>d.type==="moment"&&d.status==="planned").sort((a,b)=>a.date.localeCompare(b.date)),
     log=DT.filter(d=>d.type==="moment"&&d.status==="done").sort((a,b)=>b.date.localeCompare(a.date));
   document.querySelector('[data-dtab="ideas"]').textContent=`Ideeën${ideas.length?" ("+ideas.length+")":""}`;document.querySelector('[data-dtab="plan"]').textContent=`Gepland${plan.length?" ("+plan.length+")":""}`;document.querySelector('[data-dtab="log"]').textContent=`Herinneringen${log.length?" ("+log.length+")":""}`;
   let h="";
@@ -1288,7 +1290,7 @@ $("diForm").addEventListener("submit",async e=>{e.preventDefault();const old=diE
   if(r&&!old&&who)push(other(),`${NAMES[who]} heeft een date-idee`,it.title)});
 $("diDel").addEventListener("click",async()=>{const i=dById(diEdit);if(!i||!(await ask(`Idee “${i.title}” verwijderen? Herinneringen die ervan komen blijven bewaard.`,{title:"Verwijderen?",ok:"Ja, verwijder",danger:true})))return;closeSheet("diSheet");await dateRun("deleteDate",[i.id],"Idee verwijderd.")});
 // --- verras ons ---
-function surprise(){const pool=DT.filter(d=>d.type==="idea"&&(dcat==="all"||d.category===dcat));if(!pool.length)return;
+function surprise(){const pool=openIdeas().filter(d=>dcat==="all"||d.category===dcat);if(!pool.length)return;
   let p=pool[Math.floor(Math.random()*pool.length)];if(pool.length>1&&rnPick&&p.id===rnPick.id)p=pool.find(x=>x.id!==rnPick.id);rnPick=p;
   $("rnTitle").textContent=p.title;$("rnSub").textContent=[DCAT[p.category],p.cost!=null?COSTL[p.cost]:"",p.note].filter(Boolean).join(" · ");
   $("rnAgain").hidden=pool.length<2;openSheet("rnSheet")}
