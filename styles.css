@@ -819,7 +819,7 @@ body[data-sec="date"] .card{border-color:#43121B}
 .t-rem{background:radial-gradient(120% 120% at 100% 0%,#FFF3B0 0%,#FFD23F 45%,#FF9F1C 100%);border-color:#FF9F1C;color:#2B1600}
 .t-rem .ht-k,.t-rem .ht-big{color:#2B1600}
 .t-rem:hover{box-shadow:0 0 28px rgba(255,190,40,.45)}
-.sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.sr-only{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* Shop: gezamenlijke lijst, geen naamkeuze nodig */
 body[data-sec="shop"] .who,body[data-sec="shop"] .who-label{display:none}
