@@ -1,6 +1,6 @@
 // Service worker: maakt de app installeerbaar en snel.
 // Verhoog VERSION bij elke update zodat telefoons de nieuwe versie ophalen.
-const VERSION = "voltage-v24";
+const VERSION = "voltage-v25";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "oefeningen.js", "manifest.webmanifest",
   "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png", "favicon.png"];
 

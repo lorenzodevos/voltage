@@ -439,6 +439,13 @@ $("impGo").addEventListener("click",async()=>{if(!imp||!imp.items.length)return;
 
 // ================= WORKOUT EDITOR =================
 let ed=null; // {id,date,kind,data,feel,note,staged:[]}
+let edClosing=false,edSaving=false;
+function cuid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+function edSnap(e){if(!e||!e.kind)return"";const d=e.data||{};let data;
+  if(e.kind==="run"){data=Object.assign({},d);delete data.tplId;delete data.tplName;delete data.km}
+  else data={ex:(d.ex||[]).map(x=>({id:x.id,sets:(x.sets||[]).map(s=>({r:s.r==null?null:s.r,kg:s.kg==null?null:s.kg}))}))};
+  return JSON.stringify({kind:e.kind,data:data,feel:e.feel||null,note:(e.note||"").trim()})}
+function curSnap(){return ed?edSnap(Object.assign({},ed,{note:($("fNote").value||"")})):""}
 function openEditor(o){
   if(!who){ask("Tik eerst bovenaan op je naam, zodat de app weet wie er traint.",{alert:true,title:"Wie ben jij?"});return}
   const w=o.id?byId[o.id]:null;
@@ -449,6 +456,7 @@ function openEditor(o){
   if(!w&&(ed.kind==="upper"||ed.kind==="lower"))ed.data={ex:[]};
   if(ed.kind==="run"&&!ed.data.rt)ed.data.rt="z2";
   if(ed.kind==="run"&&ed.data.rt==="interval"&&!ed.data.blocks)ed.data.blocks=[newBlock()];
+  ed.newId=w?w.id:(who+"_"+ed.date+"_"+cuid());ed.baseSnap=edSnap(ed);edClosing=false;edSaving=false;
   $("wTitle").textContent=w?"Training bewerken":"Training loggen";
   const d=pd(ed.date);$("wSub").textContent=`${NAMES[who]} · ${dayName(d)} ${fd(d)} ${d.getFullYear()}`;
   $("fNote").value=ed.note||"";syncFeel();
@@ -459,12 +467,14 @@ function openEditor(o){
 }
 // ---------- concept: alles wat je invult wordt meteen op dit toestel bewaard ----------
 const DKEY=()=>"voltage-draft-"+who;let draftTimer=null,draftChecked=false;
-function saveDraft(){if(!ed||!who||!ed.kind)return;clearTimeout(draftTimer);draftTimer=setTimeout(()=>{try{
-  const e=Object.assign({},ed,{staged:[],note:$("fNote").value});localStorage.setItem(DKEY(),JSON.stringify({ed:e,at:Date.now()}))}catch(_){}},250)}
+function saveDraft(){if(!ed||!who||!ed.kind)return;clearTimeout(draftTimer);draftTimer=setTimeout(()=>{
+  if(edClosing||!$("wSheet").classList.contains("open"))return;
+  try{if(!isDirty()){localStorage.removeItem(DKEY());return}
+    const e=Object.assign({},ed,{staged:[],note:$("fNote").value});localStorage.setItem(DKEY(),JSON.stringify({ed:e,at:Date.now()}))}catch(_){}},250)}
 function clearDraft(){clearTimeout(draftTimer);try{localStorage.removeItem(DKEY())}catch(_){}}
 function getDraft(){try{const o=JSON.parse(localStorage.getItem(DKEY())||"null");return o&&o.ed&&o.ed.kind?o:null}catch(_){return null}}
-function isDirty(){return !!(ed&&ed.kind&&(hasInput()||($("fNote").value||"").trim()||ed.feel))}
-function openDraft(dr){ed=Object.assign(dr.ed,{staged:[]});const w=ed.id?byId[ed.id]:null;
+function isDirty(){return !!(ed&&ed.kind)&&curSnap()!==ed.baseSnap}
+function openDraft(dr){ed=Object.assign(dr.ed,{staged:[]});const w=ed.id?byId[ed.id]:null;ed.baseSnap=w?edSnap({kind:w.kind,data:w.data,feel:w.feel,note:w.note}):"";if(!ed.newId)ed.newId=ed.id||(who+"_"+ed.date+"_"+cuid());edClosing=false;edSaving=false;
   $("wTitle").textContent=w?"Training bewerken":"Training loggen";const d=pd(ed.date);$("wSub").textContent=`${NAMES[who]} · ${dayName(d)} ${fd(d)} ${d.getFullYear()}`;
   $("fNote").value=ed.note||"";syncFeel();$("btnDel").style.visibility=w?"visible":"hidden";
   $("editThreadBlock").style.display=w?"block":"none";if(w)renderThread($("editThread"),w.id);
@@ -473,7 +483,7 @@ async function checkDraft(force){if(!who||(draftChecked&&!force))return;draftChe
   const d=pd(dr.ed.date),t=new Date(dr.at);const lbl=dr.ed.kind==="run"?(RT[dr.ed.data&&dr.ed.data.rt]||"Run"):KIND[dr.ed.kind].l;
   if(await ask(`Je was een ${lbl}-training aan het loggen voor ${dayName(d).toLowerCase()} ${fd(d)}. Laatst bewaard om ${String(t.getHours()).padStart(2,"0")}:${String(t.getMinutes()).padStart(2,"0")}. Niets is verloren.`,{title:"Verder loggen?",ok:"Ja, verder",cancel:"Nee, weggooien"}))openDraft(dr);else clearDraft()}
 async function requestCloseEditor(){if(isDirty()&&!(await ask("Wat je invulde voor deze training is nog niet opgeslagen.",{title:"Training weggooien?",ok:"Ja, weggooien",cancel:"Verder loggen",danger:true})))return;
-  clearDraft();closeSheet("wSheet")}
+  edClosing=true;clearDraft();closeSheet("wSheet")}
 ["input","change"].forEach(ev=>$("wSheet").addEventListener(ev,()=>saveDraft()));
 $("wSheet").addEventListener("click",()=>setTimeout(saveDraft,0));
 function newBlock(){return{reps:6,mode:"dist",dist:800,time:null,pace:"",zone:"Z4",hr:null,rest:1.5}}
@@ -674,7 +684,7 @@ function renderEditPhotos(){const box=$("editPhotos");if(!box||!ed)return;box.in
       for(const f of files){try{ed.staged.push(await resize(f))}catch(err){setStatus("Die foto kon niet gelezen worden.",true)}}renderEditPhotos();saveDraft()});box.appendChild(btn)}}
 // ---------- save / delete ----------
 $("btnSave").addEventListener("click",async()=>{
-  if(!ed||!ed.kind)return;
+  if(!ed||!ed.kind||edSaving)return;
   const d=ed.data;
   if(ed.kind==="run"){d.km=Math.round(runKm(d)*100)/100}
   const rawEx=ed.kind!=="run"?JSON.parse(JSON.stringify(d.ex||[])):null;
@@ -693,17 +703,17 @@ $("btnSave").addEventListener("click",async()=>{
   if(rawEx)tplData.ex=rawEx.map(e=>({id:e.id,sets:(e.sets&&e.sets.length?e.sets:[{r:null,kg:null},{r:null,kg:null},{r:null,kg:null}])}));
   const kind=ed.kind;
   try{localStorage.setItem(DKEY(),JSON.stringify({ed:Object.assign({},ed,{staged:[],note:$("fNote").value}),at:Date.now()}))}catch(_){}
-  const staged=ed.staged.slice();const baseId=ed.id,date=ed.date,feel=ed.feel,note=$("fNote").value.trim();closeSheet("wSheet");
+  const staged=ed.staged.slice();const baseId=ed.id,date=ed.date,feel=ed.feel,note=$("fNote").value.trim();const wid=baseId||ed.newId;edSaving=true;edClosing=true;closeSheet("wSheet");
   busy++;setStatus("Opslaan…");
   try{let res;
     if(tpl){setStatus("Workout bijwerken…");res=await call("saveTemplate",{id:tpl.id,person:who,kind,name:tpl.name,data:tplData,category:tpl.category});d.tplId=res.savedId;d.tplName=tpl.name}
-    const payload={id:baseId,person:who,date,kind,title:kind==="run"?RT[d.rt]:KIND[kind].l,data:d,feel,note};
+    const payload={id:wid,person:who,date,kind,title:kind==="run"?RT[d.rt]:KIND[kind].l,data:d,feel,note};
     setStatus("Opslaan…");res=await call("saveWorkout",payload);const id=res.savedId;
     for(let k=0;k<staged.length;k++){setStatus(`Foto ${k+1} van ${staged.length} opladen…`);res=await call("uploadPhoto",id,who,staged[k])}
-    busy--;clearDraft();apply(res);if(!baseId)pushWorkout(payload);setStatus(tpl?(tpl.id?`Opgeslagen · “${tpl.name}” is bijgewerkt.`:`Opgeslagen · workout “${tpl.name}” bewaard.`):"Opgeslagen.")}
-  catch(e){busy--;setStatus(errText(e)+" Je training staat nog als concept klaar.",true);const dr=getDraft();if(dr)openDraft(dr);refresh()}
+    busy--;edSaving=false;clearDraft();apply(res);if(!baseId)pushWorkout(payload);setStatus(tpl?(tpl.id?`Opgeslagen · “${tpl.name}” is bijgewerkt.`:`Opgeslagen · workout “${tpl.name}” bewaard.`):"Opgeslagen.")}
+  catch(e){busy--;edSaving=false;setStatus(errText(e)+" Je training staat nog als concept klaar.",true);const dr=getDraft();if(dr)openDraft(dr);refresh()}
 });
-$("btnDel").addEventListener("click",async()=>{if(!ed||!ed.id)return;if(!(await ask("Deze training wissen? Foto's en reacties verdwijnen ook.",{title:"Verwijderen?",ok:"Ja, verwijder",danger:true})))return;const id=ed.id;clearDraft();closeSheet("wSheet");await run("deleteWorkout",[id,who],"Gewist.")});
+$("btnDel").addEventListener("click",async()=>{if(!ed||!ed.id)return;if(!(await ask("Deze training wissen? Foto's en reacties verdwijnen ook.",{title:"Verwijderen?",ok:"Ja, verwijder",danger:true})))return;const id=ed.id;edClosing=true;clearDraft();closeSheet("wSheet");await run("deleteWorkout",[id,who],"Gewist.")});
 
 // ================= VIEW (andermans training) =================
 let viewId=null;
